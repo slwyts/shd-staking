@@ -81,7 +81,7 @@ export default function DashboardPage() {
               {scnyLoading ? (
                 <Skeleton className="h-8 w-32" />
               ) : (
-                <p className="text-2xl font-bold text-neon-green">
+                <p className="text-2xl font-bold text-accent-green">
                   {formatTokenAmount(scnyBalance ?? BigInt(0))}
                 </p>
               )}
@@ -113,7 +113,7 @@ export default function DashboardPage() {
             </Card>
             <Card className="border border-cyber-blue/30">
               <p className="mb-1 text-xs text-text-muted">总收益</p>
-              <p className="text-lg font-bold gradient-text">
+              <p className="text-lg font-bold text-cyber-blue">
                 {formatTokenAmount(rewards.totalReward)} SHD
               </p>
             </Card>

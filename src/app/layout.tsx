@@ -17,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="zh-CN">
+    <html lang="zh-CN" data-scroll-behavior="smooth">
       <body className="min-h-screen antialiased">
         <Web3Provider>
           {/* 顶部导航栏（固定定位，高度 64px） */}

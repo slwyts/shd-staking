@@ -1,85 +1,62 @@
-/**
- * @file components/three/CrystalModel.tsx
- * @description 科幻水晶模型组件。
- *   一个发光旋转的二十面体几何体，代表 SHD 代币。
- *   支持鼠标交互 — 跟随鼠标位置微微偏转。
- */
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { MeshDistortMaterial } from "@react-three/drei";
+import { useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 
-/**
- * CrystalModel — 发光旋转水晶
- * 核心视觉元素，使用扭曲材质增加科幻质感
- */
+const MODEL_PATH = "/models/shd-logo.glb";
+
 export function CrystalModel() {
-  const meshRef = useRef<THREE.Mesh>(null);
+  const groupRef = useRef<THREE.Group>(null);
   const { pointer } = useThree();
+  const { scene } = useGLTF(MODEL_PATH);
+  const [hovered, setHovered] = useState(false);
 
-  // 每帧更新：自动旋转 + 鼠标跟随
+  const targetScale = useRef(1);
+  const currentScale = useRef(1);
+
+  targetScale.current = hovered ? 1.1 : 1;
+
   useFrame((_, delta) => {
-    if (!meshRef.current) return;
+    if (!groupRef.current) return;
 
-    // 基础自转
-    meshRef.current.rotation.y += delta * 0.3;
-    meshRef.current.rotation.z += delta * 0.1;
+    // 缓慢自转
+    groupRef.current.rotation.y += delta * 0.25;
 
-    // 鼠标跟随偏转（使用线性插值平滑过渡）
-    const targetX = pointer.y * 0.3;
-    const targetY = pointer.x * 0.3;
-    meshRef.current.rotation.x = THREE.MathUtils.lerp(
-      meshRef.current.rotation.x,
-      targetX,
-      0.05
+    // 鼠标跟随偏转
+    const tiltX = pointer.y * 0.2;
+    const tiltZ = -pointer.x * 0.1;
+    groupRef.current.rotation.x = THREE.MathUtils.lerp(
+      groupRef.current.rotation.x,
+      tiltX,
+      0.04
     );
-    meshRef.current.rotation.y = THREE.MathUtils.lerp(
-      meshRef.current.rotation.y,
-      targetY,
-      0.05
+    groupRef.current.rotation.z = THREE.MathUtils.lerp(
+      groupRef.current.rotation.z,
+      tiltZ,
+      0.04
     );
+
+    // 悬停缩放
+    currentScale.current = THREE.MathUtils.lerp(
+      currentScale.current,
+      targetScale.current,
+      0.08
+    );
+    const s = currentScale.current;
+    groupRef.current.scale.set(s, s, s);
   });
 
   return (
-    <group>
-      {/* 主水晶体 */}
-      <mesh ref={meshRef} scale={1.8}>
-        <icosahedronGeometry args={[1, 1]} />
-        <MeshDistortMaterial
-          color="#00D4FF"
-          emissive="#0066AA"
-          emissiveIntensity={0.4}
-          roughness={0.1}
-          metalness={0.8}
-          distort={0.2}
-          speed={2}
-          transparent
-          opacity={0.85}
-        />
-      </mesh>
-
-      {/* 内部发光核心 */}
-      <mesh scale={0.8}>
-        <sphereGeometry args={[1, 16, 16]} />
-        <meshBasicMaterial
-          color="#00D4FF"
-          transparent
-          opacity={0.15}
-        />
-      </mesh>
-
-      {/* 外圈光环 */}
-      <mesh rotation={[Math.PI / 2, 0, 0]} scale={2.5}>
-        <ringGeometry args={[0.95, 1, 64]} />
-        <meshBasicMaterial
-          color="#A855F7"
-          transparent
-          opacity={0.3}
-          side={THREE.DoubleSide}
-        />
-      </mesh>
+    <group
+      ref={groupRef}
+      onPointerOver={() => setHovered(true)}
+      onPointerOut={() => setHovered(false)}
+    >
+      <primitive object={scene} scale={1.6} position={[0, 0, 0]} />
     </group>
   );
 }
+
+useGLTF.preload(MODEL_PATH);

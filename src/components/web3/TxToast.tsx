@@ -28,7 +28,7 @@ const STATUS_CONFIG = {
   success: {
     icon: "✅",
     title: "交易成功",
-    color: "border-neon-green/50 bg-neon-green/10",
+    color: "border-accent-green/50 bg-accent-green/10",
   },
   error: {
     icon: "❌",

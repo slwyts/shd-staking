@@ -6,6 +6,7 @@
 "use client";
 
 import { HeroBanner } from "@/components/three/HeroBanner";
+import { StarBackground } from "@/components/three/StarBackground";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ALL_TOKENS } from "@/constants/tokens";
@@ -21,8 +22,10 @@ const STAKING_PERIODS = [
 
 export default function HomePage() {
   return (
-    <div>
-      {/* ===== 3D 科幻 Banner ===== */}
+    <div className="relative">
+      <StarBackground />
+
+      <div className="relative z-10">
       <HeroBanner />
 
       {/* ===== 代币介绍区域 ===== */}
@@ -39,7 +42,7 @@ export default function HomePage() {
             <Card key={token.symbol} hover>
               {/* 代币图标 */}
               <div
-                className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl"
+                className="mb-4 flex h-12 w-12 items-center justify-center cut-corners"
                 style={{ backgroundColor: `${token.color}20` }}
               >
                 <span
@@ -72,7 +75,7 @@ export default function HomePage() {
                 </p>
               )}
               {token.symbol === "SCNY" && (
-                <p className="mt-3 text-xs text-neon-green">
+                <p className="mt-3 text-xs text-accent-green">
                   价值恒定: 1 SCNY = 1 CNY
                 </p>
               )}
@@ -94,13 +97,13 @@ export default function HomePage() {
           {STAKING_PERIODS.map((period) => (
             <Card key={period.days} hover className="text-center">
               <p className="mb-1 text-sm text-text-secondary">{period.label}</p>
-              <p className="mb-3 text-4xl font-bold gradient-text">
+              <p className="mb-3 text-4xl font-bold text-cyber-blue">
                 {period.rate}%
               </p>
               <p className="text-xs text-text-muted">日化收益率</p>
 
               {/* 预估年化 */}
-              <div className="mt-4 rounded-lg bg-white/5 px-3 py-2">
+              <div className="mt-4 cut-corners bg-white/5 px-3 py-2">
                 <p className="text-xs text-text-muted">
                   预估总收益率:{" "}
                   <span className="text-cyber-blue font-medium">
@@ -116,7 +119,7 @@ export default function HomePage() {
         <div className="mt-10 text-center">
           <a
             href="/staking"
-            className="inline-flex items-center rounded-xl bg-gradient-to-r from-cyber-blue to-cyber-purple px-8 py-3.5 text-base font-semibold text-white transition-all hover:shadow-[0_0_30px_rgba(0,212,255,0.4)]"
+            className="cut-corners inline-flex items-center bg-cyber-blue px-8 py-3.5 text-base font-semibold text-deep-space transition-all hover:bg-cyber-blue/85"
           >
             立即质押
           </a>
@@ -160,7 +163,7 @@ export default function HomePage() {
               ].map((v) => (
                 <div
                   key={v.level}
-                  className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-1.5"
+                  className="flex items-center justify-between cut-corners bg-white/5 px-3 py-1.5"
                 >
                   <Badge variant="purple">{v.level}</Badge>
                   <span className="text-sm text-cyber-blue">{v.rate}</span>
@@ -173,6 +176,7 @@ export default function HomePage() {
           </Card>
         </div>
       </section>
+      </div>
     </div>
   );
 }

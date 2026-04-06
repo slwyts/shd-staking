@@ -21,7 +21,7 @@ export function ConnectButton() {
   if (isConnected && address) {
     return (
       <div className="flex items-center gap-2">
-        <span className="rounded-lg border border-card-border bg-white/5 px-3 py-1.5 text-xs font-mono text-cyber-blue">
+        <span className="cut-corners border border-card-border bg-white/5 px-3 py-1.5 text-xs font-mono text-cyber-blue">
           {formatAddress(address)}
         </span>
         <Button variant="ghost" size="sm" onClick={() => disconnect()}>

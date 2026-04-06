@@ -30,7 +30,7 @@ export function Input({ label, suffix, error, className = "", ...props }: InputP
         </label>
       )}
       <div
-        className={`flex items-center rounded-xl border bg-white/5 transition-colors focus-within:border-cyber-blue/50 focus-within:bg-white/[0.08] ${
+        className={`flex items-center border bg-white/5 transition-colors focus-within:border-cyber-blue/50 focus-within:bg-white/[0.08] cut-corners ${
           error ? "border-error/50" : "border-card-border"
         }`}
       >

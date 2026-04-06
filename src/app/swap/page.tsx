@@ -68,7 +68,7 @@ export default function SwapPage() {
               </Badge>
               <button
                 onClick={toggleDirection}
-                className="rounded-lg border border-card-border p-2 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
+                className="cut-corners border border-card-border p-2 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary"
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M4 6l4-4 4 4M4 10l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -105,7 +105,7 @@ export default function SwapPage() {
 
             {/* 箭头分隔 */}
             <div className="my-4 flex justify-center">
-              <div className="rounded-full border border-card-border bg-white/5 p-2">
+              <div className="cut-corners border border-card-border bg-white/5 p-2">
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                   <path d="M8 3v10M5 10l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-cyber-blue" />
                 </svg>
@@ -113,7 +113,7 @@ export default function SwapPage() {
             </div>
 
             {/* 输出预估 */}
-            <div className="rounded-xl border border-card-border bg-white/5 px-4 py-3">
+            <div className="cut-corners border border-card-border bg-white/5 px-4 py-3">
               <p className="mb-1 text-xs text-text-muted">获得 ({toSymbol})</p>
               <p className="text-2xl font-bold text-text-primary">
                 {quote.outputAmount > 0

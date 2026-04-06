@@ -35,7 +35,7 @@ export function LoadingSpinner({ size = "md", className = "" }: LoadingSpinnerPr
 export function Skeleton({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`animate-pulse rounded-lg bg-white/10 ${className}`}
+      className={`animate-pulse cut-corners bg-white/10 ${className}`}
     />
   );
 }

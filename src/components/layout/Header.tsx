@@ -30,10 +30,10 @@ export function Header() {
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyber-blue to-cyber-purple">
+          <div className="flex h-8 w-8 items-center justify-center cut-corners bg-cyber-blue">
             <span className="text-sm font-bold text-white">S</span>
           </div>
-          <span className="text-lg font-bold gradient-text">SHD Staking</span>
+          <span className="text-lg font-bold text-text-primary">SHD Staking</span>
         </Link>
 
         {/* 导航链接 — 桌面端 */}
@@ -44,7 +44,7 @@ export function Header() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 ${
+                className={`cut-corners px-4 py-2 text-sm font-medium transition-all duration-200 ${
                   isActive
                     ? "text-cyber-blue bg-cyber-blue/10"
                     : "text-text-secondary hover:text-text-primary hover:bg-white/5"
@@ -68,7 +68,7 @@ export function Header() {
             <Link
               key={item.href}
               href={item.href}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`cut-corners px-3 py-1.5 text-xs font-medium transition-colors ${
                 isActive
                   ? "text-cyber-blue bg-cyber-blue/10"
                   : "text-text-secondary"

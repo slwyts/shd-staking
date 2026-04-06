@@ -102,7 +102,7 @@ export default function StakingPage() {
           {/* 左侧 — 质押表单 */}
           <div className="lg:col-span-2 space-y-6">
             {/* 周期选择 — 赛博切角卡片 */}
-            <Card variant="cyber">
+            <Card>
               <h3 className="mb-4 text-sm font-medium text-text-secondary">
                 选择质押周期
               </h3>
@@ -216,7 +216,7 @@ export default function StakingPage() {
                 <hr className="border-card-border" />
                 <div className="flex justify-between">
                   <span className="text-sm text-text-muted">每日收益</span>
-                  <span className="text-sm font-medium text-neon-green">
+                  <span className="text-sm font-medium text-accent-green">
                     {(numericAmount * dailyRate / 100).toFixed(4)} SHD
                   </span>
                 </div>
@@ -224,7 +224,7 @@ export default function StakingPage() {
                   <span className="text-sm font-medium text-text-secondary">
                     预估总收益
                   </span>
-                  <span className="text-lg font-bold gradient-text">
+                  <span className="text-lg font-bold text-cyber-blue">
                     {estimatedReward.toFixed(4)} SHD
                   </span>
                 </div>
@@ -237,7 +237,7 @@ export default function StakingPage() {
                 <h3 className="mb-3 text-sm font-medium text-text-secondary">
                   我的推荐链接
                 </h3>
-                <div className="rounded-lg bg-white/5 p-3">
+                <div className="cut-corners bg-white/5 p-3">
                   <p className="break-all text-xs font-mono text-text-muted">
                     {typeof window !== "undefined"
                       ? `${window.location.origin}/staking?ref=${address}`
