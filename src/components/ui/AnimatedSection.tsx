@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode } from "react";
+import { type ReactNode, useCallback } from "react";
 import { useInView } from "@/hooks/common/useInView";
 
 type AnimationDirection = "up" | "down" | "left" | "right" | "scale" | "fade";
@@ -33,11 +33,18 @@ export function AnimatedSection({
 }: AnimatedSectionProps) {
   const { ref, isInView } = useInView({ threshold: 0.08 });
 
+  const callbackRef = useCallback(
+    (node: HTMLElement | null) => {
+      (ref as React.MutableRefObject<HTMLElement | null>).current = node;
+    },
+    [ref],
+  );
+
   const fromTransform = directionMap[direction].from;
 
   return (
     <Tag
-      ref={ref}
+      ref={callbackRef}
       className={className}
       style={{
         opacity: isInView ? 1 : 0,
