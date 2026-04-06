@@ -21,7 +21,7 @@ export function ImageCarousel({
 }: ImageCarouselProps) {
   const [current, setCurrent] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setInterval>>();
+  const timerRef = useRef<ReturnType<typeof setInterval>>(null);
 
   const goTo = useCallback(
     (idx: number) => setCurrent(((idx % slides.length) + slides.length) % slides.length),
