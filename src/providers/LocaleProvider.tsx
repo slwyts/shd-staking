@@ -13,7 +13,7 @@ type Locale = "zh" | "en";
 
 const dict = {
   zh: {
-    "header.installWallet": "安装钱包",
+    "header.installWallet": "连接钱包",
     "header.connectWallet": "连接钱包",
     "header.connecting": "连接中...",
     "header.theme": "切换主题",
@@ -71,7 +71,7 @@ const dict = {
     "common.switchNetwork": "待切换网络",
   },
   en: {
-    "header.installWallet": "Install Wallet",
+    "header.installWallet": "Connect Wallet",
     "header.connectWallet": "Connect",
     "header.connecting": "Connecting...",
     "header.theme": "Toggle Theme",

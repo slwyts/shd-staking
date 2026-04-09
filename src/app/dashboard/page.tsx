@@ -26,6 +26,7 @@ import {
   LogOut,
   Plug,
   ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/Card";
@@ -456,7 +457,14 @@ export default function DashboardPage() {
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
           <ExternalLink className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />快捷链接
         </h2>
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
+          <Link href="/admin" className="group">
+            <Card hover className="flex items-center gap-2.5 sm:gap-3">
+              <ShieldCheck className="h-4 w-4 shrink-0 text-cyber-blue sm:h-5 sm:w-5" strokeWidth={1.5} />
+              <span className="flex-1 text-xs text-text-primary group-hover:text-cyber-blue sm:text-sm">管理控制台</span>
+              <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 sm:h-4 sm:w-4" />
+            </Card>
+          </Link>
           <a
             href={siteConfig.links.chainWebsite}
             target="_blank"
@@ -496,9 +504,6 @@ export default function DashboardPage() {
         </div>
       </AnimatedSection>
 
-      <p className="pb-4 text-center text-[10px] text-text-muted sm:text-xs">
-        DOR · {siteConfig.name} v{siteConfig.version}
-      </p>
     </PageContainer>
   );
 }
