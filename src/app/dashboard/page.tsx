@@ -7,7 +7,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { isAddress } from "viem";
-import { useAccount, useConnect, useDisconnect, useSwitchChain } from "wagmi";
+import { useAccount, useConnect, useDisconnect, useSwitchChain, useReadContract } from "wagmi";
+import { ORDER_BOOK_ABI } from "@/constants/abis/OrderBook";
+import { ORDER_BOOK_ADDRESS } from "@/constants/contracts";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
 import {
   Megaphone,
@@ -43,7 +45,26 @@ export default function DashboardPage() {
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
 
-  const { activePositions, isLoading: positionsLoading } = useMyPositions();
+  // 读取用户的 OrderBook 订单
+  const { data: myOrders, isLoading: ordersLoading } = useReadContract({
+    address: ORDER_BOOK_ADDRESS,
+    abi: ORDER_BOOK_ABI,
+    functionName: "getOrders",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+  type ChainOrder = {
+    id: bigint; principal: bigint; totalReward: bigint; claimed: bigint;
+    nextRelease: bigint; duration: bigint; status: number; remark: string;
+  };
+  const orders = (myOrders as ChainOrder[] | undefined) ?? [];
+
+  // 每分钟刷新一次「当前时间」，驱动进度条更新
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const [refInput, setRefInput] = useState("");
   const [refMsg, setRefMsg] = useState<string | null>(null);
@@ -143,38 +164,84 @@ export default function DashboardPage() {
       {/* ===== 我的订单 ===== */}
       <section className="mb-6 animate-slide-up opacity-0 sm:mb-8" style={{ animationDelay: "0.29s" }}>
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
-          <FileText className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />我的订单
+          <FileText className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />质押记录
         </h2>
-        <Card>
-          {positionsLoading ? (
-            <Skeleton className="h-14 w-full sm:h-16" />
-          ) : activePositions.length === 0 ? (
-            <p className="py-3 text-center text-xs text-text-muted sm:py-4 sm:text-sm">当前还没有链上订单。</p>
-          ) : (
-            <ul className="space-y-1.5 sm:space-y-2">
-              {activePositions.slice(0, 5).map((pos) => {
-                const expired = Date.now() / 1000 > pos.endTime;
-                return (
-                  <li
-                    key={pos.id}
-                    className="flex items-center justify-between rounded-lg bg-white/5 px-3 py-2 text-xs sm:px-4 sm:text-sm"
-                  >
-                    <span className="text-text-secondary">{pos.period} 天周期</span>
-                    <span className={expired ? "text-accent-green" : "text-cyber-blue"}>
-                      {expired ? "已到期" : "进行中"}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          <Link
-            href="/staking"
-            className="mt-3 block text-center text-xs text-cyber-blue hover:underline sm:mt-4 sm:text-sm"
-          >
-            质押 / 查看详情
-          </Link>
-        </Card>
+        {!isConnected || !address ? (
+          <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钉包</p></Card>
+        ) : ordersLoading ? (
+          <div className="space-y-3">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+        ) : orders.length === 0 ? (
+          <Card><p className="py-4 text-center text-xs text-text-muted">暂无订单记录</p></Card>
+        ) : (
+          <div className="space-y-3">
+            {orders.map((o) => {
+              const principal = Number(o.principal) / 1e18;
+              const totalReward = Number(o.totalReward) / 1e18;
+              const claimed = Number(o.claimed) / 1e18;
+              const claimable = Math.max(0, totalReward - claimed);
+              // 进度条：基于时间（到期时间 - 锁定天数 = 开始时间）
+              const expiryTs = Number(o.nextRelease); // 秒
+              const durationSec = Number(o.duration) * 86400;
+              const startTs = expiryTs > 0 && durationSec > 0 ? expiryTs - durationSec : 0;
+              const nowSec = nowMs / 1000;
+              const timeProgress = startTs > 0 && durationSec > 0
+                ? Math.min(100, Math.max(0, Math.round(((nowSec - startTs) / durationSec) * 100)))
+                : 0;
+              const statusLabel = o.status === 0 ? "锁仓中" : o.status === 1 ? "已解锁" : "已完成";
+              const statusColor = o.status === 0 ? "bg-amber-orange/20 text-amber-orange" : o.status === 1 ? "bg-cyber-blue/20 text-cyber-blue" : "bg-accent-green/20 text-accent-green";
+              const expiryDate = expiryTs > 0 ? new Date(expiryTs * 1000).toLocaleDateString("zh-CN") : "—";
+              return (
+                <Card key={Number(o.id)} className="border-card-border">
+                  {/* 头部: 编号 + 状态 */}
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="font-bold text-text-primary">#{Number(o.id)}</span>
+                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium sm:text-xs ${statusColor}`}>{statusLabel}</span>
+                  </div>
+                  {/* 两列数据 */}
+                  <div className="mb-3 grid grid-cols-2 gap-y-2 text-xs sm:text-sm">
+                    <div>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">质押本金</p>
+                      <p className="font-semibold text-text-primary">{principal.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">总收益</p>
+                      <p className="font-semibold text-text-primary">{totalReward.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">已领取</p>
+                      <p className="font-semibold text-cyber-blue">{claimed.toLocaleString()}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">到期时间</p>
+                      <p className="font-semibold text-text-primary">{expiryDate}</p>
+                    </div>
+                  </div>
+                  {/* 进度条 */}
+                  <div className="mb-3">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                      <div className="h-full rounded-full bg-cyber-blue transition-[width] duration-700" style={{ width: `${timeProgress}%` }} />
+                    </div>
+                    <div className="mt-1 flex justify-between text-[10px] text-text-muted">
+                      <span>进度 {timeProgress}%</span>
+                      <span>{Number(o.duration)} 天后结束</span>
+                    </div>
+                  </div>
+                  {/* 可提取 */}
+                  <div className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
+                    <div>
+                      <p className="text-[10px] text-text-muted sm:text-xs">可提取 (SHD)</p>
+                      <p className="font-semibold text-cyber-blue">{claimable.toLocaleString()} SHD</p>
+                    </div>
+                  </div>
+                  {o.remark && <p className="mt-2 text-[10px] text-text-muted">{o.remark}</p>}
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* ===== 链上钱包 ===== */}

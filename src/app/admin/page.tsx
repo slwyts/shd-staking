@@ -6,7 +6,10 @@
 
 import Link from "next/link";
 import { useCallback, useMemo, useState } from "react";
-import { useAccount, useReadContract } from "wagmi";
+import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { parseEther, isAddress } from "viem";
+import { ORDER_BOOK_ABI } from "@/constants/abis/OrderBook";
+import { ORDER_BOOK_ADDRESS } from "@/constants/contracts";
 import {
   ShieldCheck,
   Megaphone,
@@ -72,19 +75,60 @@ export default function AdminPage() {
 
   const poolBalance = poolBalanceRaw as bigint | undefined;
 
-  const [manualTarget, setManualTarget] = useState("");
-  const [manualAmount, setManualAmount] = useState("");
+  // ── 添加订单表单 ──────────────────────────────────────
+  const [orderUser,        setOrderUser]        = useState("");
+  const [orderPrincipal,   setOrderPrincipal]   = useState("");
+  const [orderTotalReward, setOrderTotalReward] = useState("");
+  const [orderExpiry,      setOrderExpiry]      = useState(""); // 到期时间 YYYY-MM-DD
+  const [orderDuration,    setOrderDuration]    = useState("30");
+  const [orderStatus,      setOrderStatus]      = useState("0");
+  const [orderRemark,      setOrderRemark]      = useState("");
+  const [addMsg,           setAddMsg]           = useState<string | null>(null);
+
+  const { writeContract, data: addTxHash, isPending: isAddPending, reset: resetWrite } = useWriteContract();
+  const { isLoading: isAddConfirming, isSuccess: isAddSuccess } = useWaitForTransactionReceipt({ hash: addTxHash });
+
+  const handleAddOrder = useCallback(() => {
+    setAddMsg(null);
+    if (!isAddress(orderUser))           { setAddMsg("用户地址格式不正确"); return; }
+    if (!orderPrincipal || isNaN(Number(orderPrincipal))) { setAddMsg("请输入有效本金"); return; }
+    if (!orderTotalReward || isNaN(Number(orderTotalReward))) { setAddMsg("请输入有效总收益"); return; }
+    const expiryTs = orderExpiry
+      ? BigInt(Math.floor(new Date(orderExpiry).getTime() / 1000))
+      : BigInt(0);
+    resetWrite();
+    writeContract({
+      address: ORDER_BOOK_ADDRESS,
+      abi: ORDER_BOOK_ABI,
+      functionName: "addOrder",
+      args: [
+        orderUser as `0x${string}`,
+        parseEther(orderPrincipal),
+        parseEther(orderTotalReward),
+        expiryTs,
+        BigInt(orderDuration || "0"),
+        Number(orderStatus) as 0 | 1 | 2,
+        orderRemark,
+      ],
+    });
+  }, [orderUser, orderPrincipal, orderTotalReward, orderExpiry, orderDuration, orderStatus, orderRemark, writeContract, resetWrite]);
+
+  // ── 查询用户订单（读合约）──────────────────────────────
+  const [queryUserAddr, setQueryUserAddr] = useState("");
+  const queryEnabled = isAddress(queryUserAddr);
+  const { data: queryOrders, isLoading: queryLoading } = useReadContract({
+    address: ORDER_BOOK_ADDRESS,
+    abi: ORDER_BOOK_ABI,
+    functionName: "getOrders",
+    args: queryEnabled ? [queryUserAddr as `0x${string}`] : undefined,
+    query: { enabled: queryEnabled },
+  });
 
   const [bulkText, setBulkText] = useState("");
   const parsedLineCount = useMemo(() => {
     if (!bulkText.trim()) return 0;
-    return bulkText
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean).length;
+    return bulkText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).length;
   }, [bulkText]);
-
-  const [queryUserAddr, setQueryUserAddr] = useState("");
 
   const [rewardRatio, setRewardRatio] = useState("0.5");
   const [lockDays, setLockDays] = useState("90");
@@ -171,36 +215,71 @@ export default function AdminPage() {
         </Card>
       </section>
 
-      {/* 后台拨币 */}
+      {/* 添加订单 */}
       <section className="mb-5 sm:mb-6">
         <Card className="border-amber-orange/25 shadow-[0_0_28px_rgba(245,158,11,0.08)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
             <Zap className="h-4 w-4 text-amber-orange sm:h-5 sm:w-5" />
-            后台拨币 / 手动质押
+            添加订单（链上写入）
           </div>
-          <div className="space-y-4">
+          <div className="space-y-3">
+            {([
+              { label: "用户地址",     placeholder: "0x...",   value: orderUser,        set: setOrderUser,        type: "text" },
+              { label: "质押本金",     placeholder: "10000",   value: orderPrincipal,   set: setOrderPrincipal,   type: "text" },
+              { label: "总收益",       placeholder: "15000",   value: orderTotalReward, set: setOrderTotalReward, type: "text" },
+              { label: "锁定天数",     placeholder: "30",      value: orderDuration,    set: setOrderDuration,    type: "text" },
+            ] as const).map((row) => (
+              <div key={row.label}>
+                <p className="mb-1.5 text-xs text-text-secondary">{row.label}</p>
+                <input
+                  type={row.type}
+                  placeholder={row.placeholder}
+                  value={row.value}
+                  onChange={(e) => (row.set as (v: string) => void)(e.target.value)}
+                  className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
+                />
+              </div>
+            ))}
             <div>
-              <p className="mb-1.5 text-xs text-text-secondary">目标用户</p>
+              <p className="mb-1.5 text-xs text-text-secondary">到期时间</p>
               <input
                 type="text"
-                placeholder="用户钱包地址 (0x...)"
-                value={manualTarget}
-                onChange={(e) => setManualTarget(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50 sm:py-3"
+                placeholder="例：2026-07-09"
+                value={orderExpiry}
+                onChange={(e) => setOrderExpiry(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
               />
             </div>
             <div>
-              <p className="mb-1.5 text-xs text-text-secondary">数量 (SHD)</p>
+              <p className="mb-1.5 text-xs text-text-secondary">状态</p>
+              <select
+                value={orderStatus}
+                onChange={(e) => setOrderStatus(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-card-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-cyber-blue/50"
+              >
+                <option value="0">锁仓中</option>
+                <option value="1">已解锁</option>
+                <option value="2">已完成</option>
+              </select>
+            </div>
+            <div>
+              <p className="mb-1.5 text-xs text-text-secondary">备注（可选）</p>
               <input
                 type="text"
-                placeholder="拨币数量"
-                value={manualAmount}
-                onChange={(e) => setManualAmount(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50 sm:py-3"
+                placeholder="备注信息"
+                value={orderRemark}
+                onChange={(e) => setOrderRemark(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
               />
             </div>
-            <Button className="w-full" onClick={placeholderAction}>
-              确认执行
+            {addMsg && <p className="text-xs text-error">{addMsg}</p>}
+            {isAddSuccess && <p className="text-xs text-accent-green">✓ 订单已上链</p>}
+            <Button
+              className="w-full"
+              loading={isAddPending || isAddConfirming}
+              onClick={handleAddOrder}
+            >
+              {isAddPending ? "等待签名…" : isAddConfirming ? "确认中…" : "提交订单"}
             </Button>
           </div>
         </Card>
@@ -227,23 +306,51 @@ export default function AdminPage() {
         </Card>
       </section>
 
-      {/* 查询用户仓位 */}
+      {/* 查询用户订单 */}
       <section className="mb-5 sm:mb-6">
         <Card className="border-cyber-blue/30 shadow-[0_0_24px_rgba(59,130,246,0.1)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
             <Search className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />
-            查询用户仓位
+            查询用户订单
           </div>
-          <Input
-            label="用户地址"
-            placeholder="0x..."
+          <input
+            type="text"
+            placeholder="输入用户地址 0x..."
             value={queryUserAddr}
             onChange={(e) => setQueryUserAddr(e.target.value)}
-            className="text-sm"
+            className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
           />
-          <Button variant="secondary" className="mt-4 w-full border-cyber-blue/50 text-cyber-blue hover:bg-cyber-blue/10" onClick={placeholderAction}>
-            查询
-          </Button>
+          {queryEnabled && (
+            <div className="mt-4 space-y-2">
+              {queryLoading ? (
+                <p className="text-center text-xs text-text-muted">查询中…</p>
+              ) : !queryOrders || (queryOrders as readonly unknown[]).length === 0 ? (
+                <p className="text-center text-xs text-text-muted">该用户暂无订单</p>
+              ) : (
+                (queryOrders as Array<{
+                  id: bigint; principal: bigint; totalReward: bigint; claimed: bigint;
+                  nextRelease: bigint; duration: bigint; status: number; remark: string;
+                }>).map((o) => (
+                  <div key={Number(o.id)} className="rounded-lg border border-card-border bg-white/[0.03] p-3 text-xs">
+                    <div className="mb-1 flex justify-between">
+                      <span className="font-medium text-text-primary">#{Number(o.id)}</span>
+                      <span className={o.status === 0 ? "text-amber-orange" : o.status === 1 ? "text-cyber-blue" : "text-accent-green"}>
+                        {o.status === 0 ? "锁仓中" : o.status === 1 ? "已解锁" : "已完成"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-y-1 text-text-muted">
+                      <span>本金：<span className="text-text-primary">{(Number(o.principal) / 1e18).toLocaleString()}</span></span>
+                      <span>总收益：<span className="text-text-primary">{(Number(o.totalReward) / 1e18).toLocaleString()}</span></span>
+                      <span>已领取：<span className="text-text-primary">{(Number(o.claimed) / 1e18).toLocaleString()}</span></span>
+                      <span>天数：<span className="text-text-primary">{Number(o.duration)} 天</span></span>
+                      {o.nextRelease > BigInt(0) && <span className="col-span-2">到期：<span className="text-text-primary">{new Date(Number(o.nextRelease) * 1000).toLocaleDateString("zh-CN")}</span></span>}
+                      {o.remark && <span className="col-span-2">备注：<span className="text-text-primary">{o.remark}</span></span>}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </Card>
       </section>
 
