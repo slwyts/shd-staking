@@ -31,7 +31,7 @@ export function ImageCarousel({
   useEffect(() => {
     if (isHovered) return;
     timerRef.current = setInterval(() => goTo(current + 1), interval);
-    return () => clearInterval(timerRef.current);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [current, interval, isHovered, goTo]);
 
   const handleDragStart = useRef(0);
