@@ -8,7 +8,7 @@ import { useLocale } from "@/providers/LocaleProvider";
 import { formatAddress } from "@/utils/format";
 
 function WalletButton() {
-  const { isConnected, address, isPending: isAccountPending } = useAccount();
+  const { isConnected, address } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
 
@@ -37,7 +37,7 @@ function WalletButton() {
   return (
     <button
       type="button"
-      disabled={isConnecting || isAccountPending || !injected}
+      disabled={isConnecting || !injected}
       onClick={() => injected && connect({ connector: injected })}
       className="flex items-center gap-1 rounded-lg border border-transparent bg-white/5 px-2 py-1.5 transition-all duration-200 hover:border-amber-orange/30 hover:bg-amber-orange/5 active:scale-95 disabled:opacity-50 sm:gap-1.5 sm:px-3"
     >
