@@ -7,7 +7,7 @@
 
 import { Suspense, useState, useMemo, useCallback, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
-import { Wallet, Copy, Check, Lock, Calculator } from "lucide-react";
+import { Wallet, Lock, Calculator } from "lucide-react";
 import { isAddress, parseUnits } from "viem";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { NetworkGuard } from "@/components/web3/NetworkGuard";
@@ -37,7 +37,7 @@ const PERIOD_TABS = [
 
 function StakingPageInner() {
   const searchParams = useSearchParams();
-  const { isConnected, connectWallet, address } = useWallet();
+  const { isConnected, connectWallet } = useWallet();
   const { pools } = useStakingPools();
   const { stake, isSending, isConfirming, isConfirmed } = useStake();
   const { balance: shdBalance } = useTokenBalance(SHD_TOKEN_ADDRESS);
@@ -252,36 +252,6 @@ function StakingPageInner() {
                 </div>
               </Card>
             </div>
-
-            {/* 推荐链接 */}
-            {isConnected && address && (
-              <div className="animate-slide-up opacity-0 lg:animate-slide-left" style={{ animationDelay: "0.25s" }}>
-                <Card>
-                  <h3 className="mb-2.5 text-xs font-medium text-text-secondary sm:mb-3 sm:text-sm">
-                    我的推荐链接
-                  </h3>
-                  <div className="cut-corners bg-white/5 p-2.5 transition-colors duration-200 hover:bg-white/[0.08] sm:p-3">
-                    <p className="break-all text-[10px] font-mono text-text-muted sm:text-xs">
-                      {typeof window !== "undefined"
-                        ? `${window.location.origin}/staking?ref=${address}`
-                        : ""}
-                    </p>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    className="mt-2.5 w-full sm:mt-3"
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        `${window.location.origin}/staking?ref=${address}`
-                      );
-                    }}
-                  >
-                    复制推荐链接
-                  </Button>
-                </Card>
-              </div>
-            )}
           </div>
         </div>
       </PageContainer>

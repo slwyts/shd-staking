@@ -18,30 +18,21 @@ import {
   FileText,
   AlertTriangle,
   Wallet,
-  TrendingUp,
-  Users,
-  Lock,
   Link2,
   ExternalLink,
   LogOut,
   Plug,
   ChevronRight,
-  ShieldCheck,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Loading";
-import { useTokenBalance } from "@/hooks/token/useTokenBalance";
 import { useMyPositions } from "@/hooks/dashboard/useMyPositions";
-import { useMyRewards } from "@/hooks/dashboard/useMyRewards";
-import { useTeamInfo } from "@/hooks/dashboard/useTeamInfo";
-import { useUnstake } from "@/hooks/staking/useUnstake";
-import { SHD_TOKEN_ADDRESS, DHC_TOKEN_ADDRESS, SCNY_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { STORAGE_PREFERRED_REFERRER } from "@/constants/storageKeys";
-import { formatTokenAmount, formatLargeNumber, formatAddress } from "@/utils/format";
-import { V_LEVEL_CONFIG } from "@/types/team";
+import { formatAddress } from "@/utils/format";
 import { dorNetwork } from "@/config/chains";
 import { siteConfig } from "@/config/site";
 
@@ -50,16 +41,9 @@ export default function DashboardPage() {
   const { connect, connectors, isPending, variables } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
-  const showAssets = isConnected && !!address && chainId === dorNetwork.id;
   const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
 
-  const { balance: shdBalance, isLoading: shdLoading } = useTokenBalance(SHD_TOKEN_ADDRESS);
-  const { balance: dhcBalance, isLoading: dhcLoading } = useTokenBalance(DHC_TOKEN_ADDRESS);
-  const { balance: scnyBalance, isLoading: scnyLoading } = useTokenBalance(SCNY_TOKEN_ADDRESS);
   const { activePositions, isLoading: positionsLoading } = useMyPositions();
-  const { rewards } = useMyRewards();
-  const { teamInfo, isLoading: teamLoading } = useTeamInfo();
-  const { unstake, isSending: isUnstaking } = useUnstake();
 
   const [refInput, setRefInput] = useState("");
   const [refMsg, setRefMsg] = useState<string | null>(null);
@@ -106,37 +90,12 @@ export default function DashboardPage() {
       ? String((variables.connector as { id: string }).id)
       : undefined;
 
-  const assetLoading = showAssets && (shdLoading || dhcLoading || scnyLoading);
-
   return (
     <PageContainer>
       <div className="animate-slide-up">
         <h1 className="mb-1 text-lg font-semibold text-text-primary sm:text-xl">个人中心</h1>
         <p className="mb-5 text-xs text-text-muted sm:mb-6 sm:text-sm">管理钱包、查看资产与团队业绩</p>
       </div>
-
-      <section className="mb-5 animate-scale-in opacity-0 sm:mb-6" style={{ animationDelay: "0.08s" }}>
-        <Card className="text-center" glow={showAssets}>
-          <p className="text-[10px] text-text-muted sm:text-xs">总资产估值</p>
-          {assetLoading ? (
-            <Skeleton className="mx-auto mt-2 h-7 w-36 sm:h-8 sm:w-40" />
-          ) : (
-            <p className="mt-1 font-mono text-xl font-semibold text-text-primary sm:text-2xl">
-              {showAssets ? formatTokenAmount(shdBalance ?? BigInt(0), 18, 4) : "0.0000"}
-              <span className="ml-1 text-xs text-text-secondary sm:ml-1.5 sm:text-sm">SHD</span>
-            </p>
-          )}
-          {showAssets ? (
-            <p className="mt-1.5 text-[10px] text-text-muted sm:mt-2 sm:text-xs">
-              DHC {formatTokenAmount(dhcBalance ?? BigInt(0), 18, 2)} · SCNY {formatTokenAmount(scnyBalance ?? BigInt(0), 18, 2)}
-            </p>
-          ) : (
-            <p className="mt-1.5 text-[10px] text-text-muted sm:mt-2 sm:text-xs">
-              连接钱包并切换至 {dorNetwork.name} 后显示余额
-            </p>
-          )}
-        </Card>
-      </section>
 
       {/* ===== 公告条 ===== */}
       <section className="mb-6 animate-slide-up opacity-0 sm:mb-8" style={{ animationDelay: "0.15s" }}>
@@ -322,149 +281,12 @@ export default function DashboardPage() {
         )}
       </section>
 
-      {/* ===== 链上数据（连接正确网络后显示） ===== */}
-      {showAssets && (
-        <>
-          {/* 收益统计 */}
-          <AnimatedSection as="section" className="mb-6 sm:mb-8" direction="up">
-            <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
-              <TrendingUp className="h-4 w-4 text-accent-green sm:h-5 sm:w-5" />收益统计
-            </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-              {[
-                { label: "静态收益", value: formatTokenAmount(rewards.staticReward) },
-                { label: "直推收益", value: formatTokenAmount(rewards.referralReward) },
-                { label: "团队极差收益", value: formatTokenAmount(rewards.teamReward) },
-              ].map((item, i) => (
-                <AnimatedSection key={item.label} direction="scale" delay={i * 0.08}>
-                  <Card hover>
-                    <p className="mb-0.5 text-[10px] text-text-muted sm:mb-1 sm:text-xs">{item.label}</p>
-                    <p className="text-base font-bold text-text-primary sm:text-lg">
-                      {item.value} SHD
-                    </p>
-                  </Card>
-                </AnimatedSection>
-              ))}
-            </div>
-          </AnimatedSection>
-
-          {/* 质押持仓 */}
-          <AnimatedSection as="section" className="mb-6 sm:mb-8" direction="up" delay={0.1}>
-            <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
-              <Lock className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />质押持仓
-              {activePositions.length > 0 && <Badge variant="blue" className="ml-1 sm:ml-2" pulse>{activePositions.length}</Badge>}
-            </h2>
-            {positionsLoading ? (
-              <div className="space-y-2.5 sm:space-y-3">
-                <Skeleton className="h-16 w-full sm:h-20" />
-                <Skeleton className="h-16 w-full sm:h-20" />
-              </div>
-            ) : activePositions.length === 0 ? (
-              <Card className="py-8 text-center sm:py-10">
-                <p className="text-xs text-text-muted sm:text-sm">暂无质押持仓</p>
-                <a href="/staking" className="mt-2.5 inline-block text-xs text-cyber-blue hover:underline sm:mt-3 sm:text-sm">前往质押</a>
-              </Card>
-            ) : (
-              <div className="space-y-2.5 sm:space-y-3">
-                {activePositions.map((pos) => {
-                  const isExpired = Date.now() / 1000 > pos.endTime;
-                  return (
-                    <Card key={pos.id} hover>
-                      <div className="flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-semibold text-text-primary">{formatTokenAmount(pos.amount)} SHD</span>
-                            <Badge variant={isExpired ? "green" : "blue"}>
-                              {pos.period}天 · {isExpired ? "已到期" : "进行中"}
-                            </Badge>
-                          </div>
-                          <p className="mt-0.5 text-[10px] text-text-muted sm:mt-1 sm:text-xs">
-                            {new Date(pos.startTime * 1000).toLocaleDateString()} → {new Date(pos.endTime * 1000).toLocaleDateString()}
-                          </p>
-                        </div>
-                        {isExpired && (
-                          <Button size="sm" variant="secondary" className="w-full sm:w-auto" loading={isUnstaking} onClick={() => unstake(pos.id)}>
-                            解除质押
-                          </Button>
-                        )}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            )}
-          </AnimatedSection>
-
-          {/* 团队业绩 */}
-          <AnimatedSection as="section" className="mb-6 sm:mb-8" direction="up" delay={0.15}>
-            <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
-              <Users className="h-4 w-4 text-cyber-purple sm:h-5 sm:w-5" />团队业绩
-            </h2>
-            {teamLoading ? (
-              <Skeleton className="h-40 w-full sm:h-48" />
-            ) : (
-              <div className="space-y-3 sm:grid sm:grid-cols-2 sm:gap-6 sm:space-y-0">
-                <Card>
-                  <div className="space-y-3 sm:space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-xs text-text-muted sm:text-sm">当前等级</span>
-                      <Badge variant="purple">
-                        {teamInfo ? (V_LEVEL_CONFIG[teamInfo.vLevel]?.label ?? "普通用户") : "普通用户"}
-                      </Badge>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-text-muted sm:text-sm">直推人数</span>
-                      <span className="text-xs font-medium text-text-primary sm:text-sm">{teamInfo?.directCount ?? 0}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-xs text-text-muted sm:text-sm">团队总人数</span>
-                      <span className="text-xs font-medium text-text-primary sm:text-sm">{teamInfo?.totalMembers ?? 0}</span>
-                    </div>
-                  </div>
-                </Card>
-                <Card>
-                  <div className="space-y-3 sm:space-y-4">
-                    <div>
-                      <p className="mb-0.5 text-xs text-text-muted sm:mb-1 sm:text-sm">大区业绩</p>
-                      <p className="text-lg font-bold text-text-primary sm:text-xl">
-                        {teamInfo ? formatLargeNumber(Number(teamInfo.majorPerformance / BigInt(10 ** 18))) : "0"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="mb-0.5 text-xs text-text-muted sm:mb-1 sm:text-sm">小区业绩（除大区外所有线）</p>
-                      <p className="text-lg font-bold text-cyber-blue sm:text-xl">
-                        {teamInfo ? formatLargeNumber(Number(teamInfo.minorPerformance / BigInt(10 ** 18))) : "0"}
-                      </p>
-                    </div>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </AnimatedSection>
-        </>
-      )}
-
-      {wrongChain && (
-        <Card className="mb-6 sm:mb-8">
-          <p className="text-xs text-text-muted sm:text-sm">
-            请先在上方切换至 {dorNetwork.name}，即可加载资产与团队数据。
-          </p>
-        </Card>
-      )}
-
       {/* ===== 快捷链接 ===== */}
       <AnimatedSection as="section" className="mb-6 sm:mb-8" direction="up">
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
           <ExternalLink className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />快捷链接
         </h2>
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4 sm:gap-4">
-          <Link href="/admin" className="group">
-            <Card hover className="flex items-center gap-2.5 sm:gap-3">
-              <ShieldCheck className="h-4 w-4 shrink-0 text-cyber-blue sm:h-5 sm:w-5" strokeWidth={1.5} />
-              <span className="flex-1 text-xs text-text-primary group-hover:text-cyber-blue sm:text-sm">管理控制台</span>
-              <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 sm:h-4 sm:w-4" />
-            </Card>
-          </Link>
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
           <a
             href={siteConfig.links.chainWebsite}
             target="_blank"
