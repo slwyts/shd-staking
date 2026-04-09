@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# shd-staking
 
-## Getting Started
+基于全国文化大数据交易中心文体旅可信空间酒类项目文档实现的 DApp 项目。本项目包含智能合约（Hardhat）与前端交互（Next.js + Wagmi）代码。
 
-First, run the development server:
+## 🛠 技术栈 (Tech Stack)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+*   **前端框架:** Next.js 16.2
+*   **UI 库:** React 19.2
+*   **Web3 Hooks:** Wagmi 3.6
+*   **以太坊交互库:** Viem 2.47
+*   **智能合约开发环境:** Hardhat 3.3
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🌐 网络配置 (Network Configuration)
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+项目部署在项目方专属公链上，相关网络参数如下：
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+*   **网络名称:** DOR Network
+*   **RPC URL:** `https://rpc.bjwmls.com`
+*   **ChainID:** `6860686`
+*   **原生符号:** `DOR`
+*   **区块浏览器:** `https://block.bjwmls.com`
+*   **区块浏览器 API:** `https://block.bjwmls.com/api`
+*   **公链官网:** `https://website.bjwmls.com/`
+*   **钱包下载:** `https://oss.bjwmls.com/cross/app-release.apk`
+*   **SWAP 接口地址:** `https://test-swap.bjwmls.com`
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## 💰 经济模型 (Economic Model)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+系统包含三种独立发行的核心代币，其中 `SCNY` 作为本位币与其他代币组建 LP 池。
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1.  **SHD (商合道酒类交易平台生态币)**
+    *   发行总量: 10 亿枚
+    *   特性: 包含代币税（滑点）机制，用户可认购 LP 筹码。
+2.  **DHC (帝皇池酱酒 RDA)**
+    *   发行总量: 10 亿枚
+3.  **SCNY (酒类交易平台法币)**
+    *   发行总量: 100 亿枚
+    *   价值恒定: 1 SCNY = 1 CNY
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 🔄 核心业务逻辑 (Core Mechanics)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### 1. 质押模式 (Staking SHD)
+
+用户通过质押 **SHD** 参与子生态模式，获取收益。
+
+**静态收益:**
+*   质押 7 天：日化 0.3%
+*   质押 30 天：日化 0.5%
+*   质押 180 天：日化 1%
+*   质押 360 天：日化 1.2%
+
+**动态收益:**
+*   直接推荐收益：10%
+
+**团队极差 (基于小区业绩):**
+*定义：大区为业绩最高的线，小区为除大区外其他所有线业绩的总和。*
+*   **V1:** 5% (小区业绩 1W)
+*   **V2:** 10% (小区业绩 5W)
+*   **V3:** 15% (小区业绩 10W)
+*   **V4:** 20% (小区业绩 30W)
+*   **V5:** 25% (小区业绩 50W)
+*   **V6:** 全网 5% 加权分 (小区业绩 100W)
+
+### 2. 滑点/代币税 (Slippage - SHD/SCNY Pair)
+
+SHD 代币合约内嵌交易税逻辑：
+*   **买入滑点 (3.5%):**
+    *   1.5% -> LP 分红
+    *   2.0% -> 直接销毁
+*   **卖出滑点 (3.5%):**
+    *   1.5% -> LP 分红
+    *   1.5% -> 营销补贴 (直接打入项目方指定营销钱包)
+    *   0.5% -> 回流底池 (直接打入项目方指定钱包)
+
+### 3. 盈利税 (Profit Tax)
+
+产生的盈利需扣除 30% 的税费，分配如下：
+*   10% -> LP 分红
+*   10% -> 营销费用 (直接打入项目方指定钱包)
+*   10% -> 回购 SHD (直接打入项目方指定钱包)
+
+---
+
+## ⚙️ 系统实现说明 (Implementation Notes)
+
+为了符合项目方运营需求，系统在实现上遵循以下特殊逻辑：
+
+1.  **代币发行与税收:** 三种代币各自独立发行。其中 SHD 合约需实现买卖扣税（滑点）功能。
+2.  **LP 池管理:** 所有 LP 池（SCNY 本位）均由项目方官方地址创建和添加流动性，全权由项目方管理。
+3.  **用户 LP 筹码与分红:**
+    *   文档提及的“用户认购 LP 筹码”在系统实现中表现为**白名单机制**。
+    *   税收中产生的“LP 分红”不会通过智能合约自动注入 DEX LP 池，而是由项目方手动控制该白名单（名单列表）。
+    *   项目方通过管理后台获取名单列表，并将累积的 LP 分红额度**平均分配**给名单上的用户。
+4.  **资金归集地址:** 经济模型中提到的“营销费用”、“营销补贴”、“回流底池”、“回购 SHD”等资金去向，在合约实现中均配置为**项目方控制的固定钱包地址**，由项目方后续自行执行对应操作。
+5.  **大小区逻辑计算:** 团队业绩结算时，系统需统计用户所有下级的分支业绩，取业绩最大的一支作为“大区”，其余所有分支业绩之和作为“小区”，依据小区业绩匹配 V1-V6 等级。
