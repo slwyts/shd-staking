@@ -41,7 +41,7 @@ import { siteConfig } from "@/config/site";
 const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
 
 function getOrderTypeLabel(orderType: number) {
-  return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "私募锁仓" : "未知类型";
+  return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "认购锁仓" : "未知类型";
 }
 
 export default function DashboardPage() {
