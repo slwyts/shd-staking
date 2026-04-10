@@ -19,9 +19,10 @@ export const ORDER_BOOK_ABI = [
     type: "function",
     name: "addOrder",
     inputs: [
-      { name: "user",     type: "address" },
-      { name: "amount",   type: "uint256" },
-      { name: "lockDays", type: "uint256" },
+      { name: "user",      type: "address" },
+      { name: "orderType", type: "uint8" },
+      { name: "amount",    type: "uint256" },
+      { name: "lockDays",  type: "uint256" },
     ],
     outputs: [],
     stateMutability: "nonpayable",
@@ -36,6 +37,7 @@ export const ORDER_BOOK_ABI = [
         type: "tuple[]",
         components: [
           { name: "id",        type: "uint256" },
+          { name: "orderType", type: "uint8" },
           { name: "amount",    type: "uint256" },
           { name: "lockDays",  type: "uint256" },
           { name: "createdAt", type: "uint256" },

@@ -11,7 +11,6 @@ import { useAccount, useConnect, useDisconnect, useSwitchChain, useReadContract 
 import { ORDER_BOOK_ABI } from "@/constants/abis/OrderBook";
 import { ORDER_BOOK_ADDRESS } from "@/constants/contracts";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
-import { getDailyRateForLockDays, calcStakingReward } from "@/utils/calc";
 import {
   Megaphone,
   Copy,
@@ -39,6 +38,12 @@ import { formatAddress } from "@/utils/format";
 import { dorNetwork } from "@/config/chains";
 import { siteConfig } from "@/config/site";
 
+const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
+
+function getOrderTypeLabel(orderType: number) {
+  return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "私募锁仓" : "未知类型";
+}
+
 export default function DashboardPage() {
   const { isConnected, address, chainId, connector: activeConnector } = useAccount();
   const { connect, connectors, isPending, variables } = useConnect();
@@ -46,7 +51,7 @@ export default function DashboardPage() {
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
 
-  // 读取用户的 OrderBook 订单（Mini 版：id, amount, lockDays, createdAt）
+  // 读取用户的 OrderBook 订单（Mini 版：id, orderType, amount, lockDays, createdAt）
   const { data: myOrders, isLoading: ordersLoading } = useReadContract({
     address: ORDER_BOOK_ADDRESS,
     abi: ORDER_BOOK_ABI,
@@ -55,13 +60,14 @@ export default function DashboardPage() {
     query: { enabled: !!address },
   });
   type ChainOrder = {
-    id: bigint; amount: bigint; lockDays: bigint; createdAt: bigint;
+    id: bigint; orderType: bigint; amount: bigint; lockDays: bigint; createdAt: bigint;
   };
   const orders = (myOrders as ChainOrder[] | undefined) ?? [];
 
   // 每分钟刷新一次「当前时间」，驱动进度条更新
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [nowMs, setNowMs] = useState(0);
   useEffect(() => {
+    setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
@@ -185,9 +191,6 @@ export default function DashboardPage() {
               const nowSec = nowMs / 1000;
               const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
               const expired = nowSec >= expirySec;
-              // 基于经济模型计算预估收益
-              const dailyRate = getDailyRateForLockDays(lockDays);
-              const estimatedReward = calcStakingReward(amount, lockDays);
               // 进度条
               const durationSec = lockDays * 86400;
               const timeProgress = durationSec > 0
@@ -200,7 +203,12 @@ export default function DashboardPage() {
                 <Card key={Number(o.id)} className="border-card-border">
                   {/* 头部: 编号 + 状态 */}
                   <div className="mb-3 flex items-center justify-between">
-                    <span className="font-bold text-text-primary">#{Number(o.id)}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-text-primary">#{Number(o.id)}</span>
+                      <span className="rounded-md bg-cyber-blue/15 px-2 py-0.5 text-[10px] font-medium text-cyber-blue sm:text-xs">
+                        {getOrderTypeLabel(Number(o.orderType))}
+                      </span>
+                    </div>
                     <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium sm:text-xs ${statusColor}`}>{statusLabel}</span>
                   </div>
                   {/* 核心数据 */}
@@ -230,19 +238,6 @@ export default function DashboardPage() {
                     <div className="mt-1 flex justify-between text-[10px] text-text-muted">
                       <span>进度 {timeProgress}%</span>
                       <span>{expired ? "已到期" : `剩余 ${remainDays} 天`}</span>
-                    </div>
-                  </div>
-                  {/* 预估收益（基于经济模型） */}
-                  <div className="rounded-lg bg-white/[0.04] px-3 py-2">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-[10px] text-text-muted sm:text-xs">预估总收益（日化 {dailyRate}%）</p>
-                        <p className="font-semibold text-accent-green">{estimatedReward.toLocaleString(undefined, { maximumFractionDigits: 2 })} SHD</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] text-text-muted sm:text-xs">到期本息合计</p>
-                        <p className="font-semibold text-cyber-blue">{(amount + estimatedReward).toLocaleString(undefined, { maximumFractionDigits: 2 })} SHD</p>
-                      </div>
                     </div>
                   </div>
                 </Card>

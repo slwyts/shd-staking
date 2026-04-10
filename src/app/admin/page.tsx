@@ -27,7 +27,12 @@ import { SHD_TOKEN_ABI } from "@/constants/abis/SHDToken";
 import { SHD_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { dorNetwork } from "@/config/chains";
 import { formatTokenAmount } from "@/utils/format";
-import { getDailyRateForLockDays, calcStakingReward } from "@/utils/calc";
+
+const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
+
+function getOrderTypeLabel(orderType: number) {
+  return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "私募锁仓" : "未知类型";
+}
 
 function CopyAddressRow({ label, address }: { label: string; address: string }) {
   const [copied, setCopied] = useState(false);
@@ -77,7 +82,8 @@ export default function AdminPage() {
 
   const poolBalance = poolBalanceRaw as bigint | undefined;
 
-  // ── 添加订单表单（仅3个字段）──────────────────────────
+  // ── 添加订单表单──────────────────────────────────────
+  const [orderType,     setOrderType]     = useState(String(PRIVATE_PLACEMENT_ORDER_TYPE));
   const [orderUser,     setOrderUser]     = useState("");
   const [orderAmount,   setOrderAmount]   = useState("");
   const [orderLockDays, setOrderLockDays] = useState("90");
@@ -86,12 +92,7 @@ export default function AdminPage() {
   const { writeContract, data: addTxHash, isPending: isAddPending, reset: resetWrite } = useWriteContract();
   const { isLoading: isAddConfirming, isSuccess: isAddSuccess } = useWaitForTransactionReceipt({ hash: addTxHash });
 
-  // 预览：根据填写的天数与金额实时计算预估收益
-  const previewDailyRate = useMemo(() => getDailyRateForLockDays(Number(orderLockDays) || 0), [orderLockDays]);
-  const previewReward = useMemo(
-    () => calcStakingReward(parseFloat(orderAmount) || 0, Number(orderLockDays) || 0),
-    [orderAmount, orderLockDays],
-  );
+  const orderTypeLabel = useMemo(() => getOrderTypeLabel(Number(orderType)), [orderType]);
 
   const handleAddOrder = useCallback(() => {
     setAddMsg(null);
@@ -105,11 +106,12 @@ export default function AdminPage() {
       functionName: "addOrder",
       args: [
         orderUser as `0x${string}`,
+        Number(orderType),
         parseEther(orderAmount),
         BigInt(orderLockDays),
       ],
     });
-  }, [orderUser, orderAmount, orderLockDays, writeContract, resetWrite]);
+  }, [orderType, orderUser, orderAmount, orderLockDays, writeContract, resetWrite]);
 
   // ── 查询用户订单（读合约）──────────────────────────────
   const [queryUserAddr, setQueryUserAddr] = useState("");
@@ -167,7 +169,7 @@ export default function AdminPage() {
         </Card>
       </section>
 
-      {/* 添加订单 — 仅 3 个字段 */}
+      {/* 添加订单 */}
       <section className="mb-5 animate-slide-up opacity-0 sm:mb-6" style={{ animationDelay: "0.12s", animationFillMode: "forwards" }}>
         <Card className="border-amber-orange/25 shadow-[0_0_28px_rgba(245,158,11,0.08)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
@@ -175,6 +177,16 @@ export default function AdminPage() {
             拨币锁仓（链上写入）
           </div>
           <div className="space-y-3">
+            <div>
+              <p className="mb-1.5 text-xs text-text-secondary">订单类型</p>
+              <select
+                value={orderType}
+                onChange={(e) => setOrderType(e.target.value)}
+                className="w-full rounded-lg border border-card-border bg-card-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-cyber-blue/50"
+              >
+                <option value="0">私募锁仓</option>
+              </select>
+            </div>
             <div>
               <p className="mb-1.5 text-xs text-text-secondary">用户地址</p>
               <input
@@ -206,13 +218,12 @@ export default function AdminPage() {
               />
             </div>
 
-            {/* 实时预览 */}
             {parseFloat(orderAmount) > 0 && Number(orderLockDays) > 0 && (
               <div className="rounded-lg bg-white/[0.04] p-3">
-                <p className="mb-2 text-[10px] font-medium text-text-muted sm:text-xs">预估（前端计算）</p>
+                <p className="mb-2 text-[10px] font-medium text-text-muted sm:text-xs">订单预览</p>
                 <div className="grid grid-cols-2 gap-y-1 text-xs text-text-secondary">
-                  <span>匹配日化：<span className="text-cyber-blue">{previewDailyRate}%</span></span>
-                  <span>预估总收益：<span className="text-accent-green">{previewReward.toLocaleString(undefined, { maximumFractionDigits: 2 })} SHD</span></span>
+                  <span>类型：<span className="text-cyber-blue">{orderTypeLabel}</span></span>
+                  <span>释放方式：<span className="text-accent-green">到期一次性释放</span></span>
                 </div>
               </div>
             )}
@@ -251,8 +262,8 @@ export default function AdminPage() {
               ) : !queryOrders || (queryOrders as readonly unknown[]).length === 0 ? (
                 <p className="text-center text-xs text-text-muted">该用户暂无订单</p>
               ) : (
-                (queryOrders as Array<{
-                  id: bigint; amount: bigint; lockDays: bigint; createdAt: bigint;
+                (queryOrders as ReadonlyArray<{
+                  id: bigint; orderType: number; amount: bigint; lockDays: bigint; createdAt: bigint;
                 }>).map((o) => {
                   const amount = Number(o.amount) / 1e18;
                   const lockDays = Number(o.lockDays);
@@ -260,8 +271,6 @@ export default function AdminPage() {
                   const expirySec = createdSec + lockDays * 86400;
                   const nowSec = Date.now() / 1000;
                   const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
-                  const dailyRate = getDailyRateForLockDays(lockDays);
-                  const reward = calcStakingReward(amount, lockDays);
                   const expired = nowSec >= expirySec;
                   return (
                     <div key={Number(o.id)} className="rounded-lg border border-card-border bg-white/[0.03] p-3 text-xs">
@@ -272,12 +281,12 @@ export default function AdminPage() {
                         </span>
                       </div>
                       <div className="grid grid-cols-2 gap-y-1 text-text-muted">
+                        <span>类型：<span className="text-cyber-blue">{getOrderTypeLabel(Number(o.orderType))}</span></span>
                         <span>数量：<span className="text-text-primary">{amount.toLocaleString()} SHD</span></span>
                         <span>锁仓：<span className="text-text-primary">{lockDays} 天</span></span>
-                        <span>日化：<span className="text-cyber-blue">{dailyRate}%</span></span>
-                        <span>预估收益：<span className="text-accent-green">{reward.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span></span>
-                        <span>剩余：<span className="text-text-primary">{remainDays} 天</span></span>
+                        <span>剩余：<span className="text-text-primary">{expired ? "已到期" : `${remainDays} 天`}</span></span>
                         <span>创建：<span className="text-text-primary">{new Date(createdSec * 1000).toLocaleDateString("zh-CN")}</span></span>
+                        <span>释放：<span className="text-accent-green">到期一次性释放</span></span>
                       </div>
                     </div>
                   );

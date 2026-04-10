@@ -8,9 +8,11 @@ pragma solidity ^0.8.20;
  */
 contract OrderBook {
     address public admin;
+    uint8 public constant ORDER_TYPE_PRIVATE_PLACEMENT = 0;
 
     struct Order {
         uint256 id;          // 订单编号（从1开始）
+        uint8 orderType;     // 订单类型：0=私募锁仓
         uint256 amount;      // SHD 数量（18位精度）
         uint256 lockDays;    // 锁仓天数
         uint256 createdAt;   // 创建时间（Unix 时间戳，合约自动填写）
@@ -33,14 +35,17 @@ contract OrderBook {
     /// @notice 为用户添加一条锁仓订单
     function addOrder(
         address user,
+        uint8 orderType,
         uint256 amount,
         uint256 lockDays
     ) external onlyAdmin {
+        require(orderType == ORDER_TYPE_PRIVATE_PLACEMENT, "OrderBook: unsupported order type");
         require(amount > 0, "OrderBook: zero amount");
         require(lockDays > 0, "OrderBook: zero lock days");
         uint256 newId = _orders[user].length + 1;
         _orders[user].push(Order({
             id:        newId,
+            orderType: orderType,
             amount:    amount,
             lockDays:  lockDays,
             createdAt: block.timestamp
