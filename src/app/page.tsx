@@ -101,7 +101,7 @@ export default function HomePage() {
                 href="/staking"
                 className="inline-flex w-full items-center justify-center rounded-2xl bg-cyber-blue px-8 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.25)] transition-all duration-300 hover:bg-cyber-blue/90 hover:shadow-[0_0_32px_rgba(59,130,246,0.4)] active:scale-[0.97] sm:w-auto sm:py-3.5"
               >
-                立即质押
+                立即认购
               </a>
             </AnimatedSection>
           </section>
@@ -122,7 +122,7 @@ export default function HomePage() {
               <div className="text-center">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted sm:text-xs">直接推荐收益</p>
                 <p className="mt-1.5 text-4xl font-black text-cyber-blue sm:mt-3 sm:text-5xl">10%</p>
-                <p className="mt-1 text-[10px] leading-relaxed text-text-secondary sm:mt-2 sm:text-sm">直推下级质押金额的 10% 作为奖励</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-text-secondary sm:mt-2 sm:text-sm">直推下级认购金额的 10% 作为奖励</p>
                 <div className="mx-auto mt-2.5 h-px w-12 rounded-full bg-amber-orange/30 sm:mt-4 sm:w-16" />
               </div>
             </AnimatedSection>

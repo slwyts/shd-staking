@@ -1,6 +1,6 @@
 /**
  * @file app/staking/page.tsx
- * @description 质押页面 — 选择质押周期、输入数量、预估收益、执行质押。
+ * @description 认购页面 — 选择认购周期、输入数量、预估收益、执行认购。
  *   包含 Approve + Stake 两步操作流程。
  */
 "use client";
@@ -111,18 +111,18 @@ function StakingPageInner() {
     <NetworkGuard>
       <PageContainer>
         <div className="animate-slide-up" style={{ animationDelay: "0s" }}>
-          <h1 className="mb-1 text-lg font-semibold text-text-primary sm:text-xl">质押 SHD</h1>
-          <p className="mb-5 text-xs text-text-muted sm:mb-6 sm:text-sm">选择质押周期，质押 SHD 获取静态收益</p>
+          <h1 className="mb-1 text-lg font-semibold text-text-primary sm:text-xl">认购 SHD</h1>
+          <p className="mb-5 text-xs text-text-muted sm:mb-6 sm:text-sm">选择认购周期，认购 SHD 获取静态收益</p>
         </div>
 
         <div className="space-y-5 lg:grid lg:grid-cols-3 lg:gap-6 lg:space-y-0">
-          {/* 左侧 — 质押表单 */}
+          {/* 左侧 — 认购表单 */}
           <div className="space-y-4 lg:col-span-2 sm:space-y-6">
             {/* 周期选择 */}
             <div className="animate-slide-up opacity-0" style={{ animationDelay: "0.08s" }}>
               <Card>
                 <h3 className="mb-3 text-xs font-medium text-text-secondary sm:mb-4 sm:text-sm">
-                  选择质押周期
+                  选择认购周期
                 </h3>
                 <Tabs
                   items={PERIOD_TABS}
@@ -140,9 +140,9 @@ function StakingPageInner() {
             <div className="animate-slide-up opacity-0" style={{ animationDelay: "0.16s" }}>
               <Card>
                 <Input
-                  label="质押数量"
+                  label="认购数量"
                   type="number"
-                  placeholder="请输入质押 SHD 数量"
+                  placeholder="请输入认购 SHD 数量"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   suffix={
@@ -201,8 +201,8 @@ function StakingPageInner() {
                   {isConfirming
                     ? "交易确认中..."
                     : isConfirmed
-                    ? "✓ 质押成功!"
-                    : "确认质押"}
+                    ? "✓ 认购成功!"
+                    : "确认认购"}
                 </Button>
               )}
             </div>
@@ -217,13 +217,13 @@ function StakingPageInner() {
                 </h3>
                 <div className="space-y-2.5 sm:space-y-3">
                   <div className="flex justify-between">
-                    <span className="text-xs text-text-muted sm:text-sm">质押数量</span>
+                    <span className="text-xs text-text-muted sm:text-sm">认购数量</span>
                     <span className="text-xs font-medium text-text-primary transition-all duration-300 sm:text-sm">
                       {numericAmount.toLocaleString()} SHD
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-xs text-text-muted sm:text-sm">质押周期</span>
+                    <span className="text-xs text-text-muted sm:text-sm">认购周期</span>
                     <span className="text-xs font-medium text-text-primary sm:text-sm">
                       {periodDays} 天
                     </span>
@@ -243,7 +243,7 @@ function StakingPageInner() {
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-text-secondary sm:text-sm">
-                      预估总收益
+                      预估到期可取
                     </span>
                     <span className={`text-base font-bold text-cyber-blue transition-all duration-500 sm:text-lg ${numericAmount > 0 ? "scale-110" : ""}`}>
                       {estimatedReward.toFixed(4)} SHD

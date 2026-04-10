@@ -84,7 +84,7 @@ export default function DashboardPage() {
     if (!isAddress(v)) { setRefMsg("地址格式不正确"); return; }
     try {
       localStorage.setItem(STORAGE_PREFERRED_REFERRER, v);
-      setRefMsg("已绑定，质押时将默认使用该推荐地址");
+      setRefMsg("已绑定，认购时将默认使用该推荐地址");
     } catch { setRefMsg("保存失败"); }
   }, [refInput]);
 
@@ -123,9 +123,9 @@ export default function DashboardPage() {
         <Card className="flex items-start gap-2.5 animate-shimmer sm:gap-3">
           <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-cyber-blue sm:h-5 sm:w-5" aria-hidden />
           <p className="text-xs leading-relaxed text-text-secondary sm:text-sm">
-            立即质押 SHD，赚取每日静态收益，参与直推与团队极差奖励。
+            立即认购 SHD，赚取每日静态收益，参与直推与团队极差奖励。
             <Link href="/staking" className="ml-1 text-cyber-blue hover:underline transition-colors">
-              去质押
+              去认购
             </Link>
           </p>
         </Card>
@@ -164,7 +164,7 @@ export default function DashboardPage() {
       {/* ===== 我的订单 ===== */}
       <section className="mb-6 animate-slide-up opacity-0 sm:mb-8" style={{ animationDelay: "0.29s" }}>
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
-          <FileText className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />质押记录
+          <FileText className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />认购记录
         </h2>
         {!isConnected || !address ? (
           <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钉包</p></Card>
@@ -203,11 +203,11 @@ export default function DashboardPage() {
                   {/* 两列数据 */}
                   <div className="mb-3 grid grid-cols-2 gap-y-2 text-xs sm:text-sm">
                     <div>
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">质押本金</p>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">认购本金</p>
                       <p className="font-semibold text-text-primary">{principal.toLocaleString()}</p>
                     </div>
                     <div className="text-right">
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">总收益</p>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">到期可取</p>
                       <p className="font-semibold text-text-primary">{totalReward.toLocaleString()}</p>
                     </div>
                     <div>
@@ -386,7 +386,7 @@ export default function DashboardPage() {
           >
             <Card hover className="flex items-center gap-2.5 sm:gap-3">
               <FileText className="h-4 w-4 shrink-0 text-cyber-blue sm:h-5 sm:w-5" strokeWidth={1.5} />
-              <span className="flex-1 text-xs text-text-primary group-hover:text-cyber-blue sm:text-sm">质押合约</span>
+              <span className="flex-1 text-xs text-text-primary group-hover:text-cyber-blue sm:text-sm">认购合约</span>
               <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 sm:h-4 sm:w-4" />
             </Card>
           </a>

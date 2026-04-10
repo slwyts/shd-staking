@@ -37,14 +37,14 @@ export function HeroBanner() {
           可信数据空间酒类数据资产平台
         </h1>
         <p className="mb-3 text-center text-[10px] text-text-secondary animate-slide-up opacity-0 sm:mb-6 sm:text-sm" style={{ animationDelay: "0.35s" }}>
-          酒类交易平台 · 质押生态系统
+          酒类交易平台 · 认购生态系统
         </p>
         <a
           href="/staking"
           className="group inline-flex items-center rounded-xl bg-cyber-blue px-5 py-2.5 text-xs font-medium text-white transition-all duration-300 hover:bg-cyber-blue/90 hover:shadow-[0_0_28px_rgba(59,130,246,0.45)] active:scale-[0.97] animate-slide-up opacity-0 sm:px-6 sm:text-sm"
           style={{ animationDelay: "0.5s" }}
         >
-          开始质押
+          开始认购
           <ArrowRight className="ml-1.5 h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-1 sm:h-4 sm:w-4" aria-hidden />
         </a>
       </div>

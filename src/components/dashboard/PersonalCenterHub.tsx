@@ -120,9 +120,9 @@ export function HubAnnounceStrip() {
     <PcCard className="flex items-start gap-3 py-3">
       <Megaphone className="mt-0.5 h-5 w-5 shrink-0 text-cyber-blue" aria-hidden />
       <p className="text-left text-xs leading-relaxed text-text-secondary">
-        立即质押 SHD，赚取每日静态收益，参与直推与团队极差奖励。
+        立即认购 SHD，赚取每日静态收益，参与直推与团队极差奖励。
         <Link href="/staking" className="ml-1 text-cyber-blue hover:underline">
-          去质押
+          去认购
         </Link>
       </p>
     </PcCard>
@@ -156,7 +156,7 @@ export function HubReferralBindCard() {
     }
     try {
       localStorage.setItem(STORAGE_PREFERRED_REFERRER, v);
-      setMsg("已绑定，质押时将默认使用该推荐地址");
+      setMsg("已绑定，认购时将默认使用该推荐地址");
     } catch {
       setMsg("保存失败，请检查浏览器存储权限");
     }
@@ -248,7 +248,7 @@ export function HubMyOrdersCard({
         href="/staking"
         className="mt-3 block text-center text-xs text-cyber-blue hover:underline"
       >
-        质押 / 查看详情
+        认购 / 查看详情
       </Link>
     </PcCard>
   );
@@ -261,7 +261,7 @@ export function HubQuickLinksCard() {
   const rows = [
     { href: siteConfig.links.chainWebsite, label: "官方网站", icon: Globe },
     { href: siteConfig.links.explorer, label: "区块浏览器", icon: Search },
-    { href: contractUrl, label: "质押合约", icon: FileText },
+    { href: contractUrl, label: "认购合约", icon: FileText },
   ];
 
   return (

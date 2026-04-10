@@ -149,7 +149,7 @@ export function WalletConnectPanel({ variant = "default" }: WalletConnectPanelPr
                 <h3 className="text-base font-semibold text-text-primary">网络不匹配</h3>
               </div>
               <p className="mb-4 text-sm text-text-secondary">
-                当前钱包不在 {dorNetwork.name}，请先切换网络后再查看资产与操作质押。
+                当前钱包不在 {dorNetwork.name}，请先切换网络后再查看资产与操作认购。
               </p>
               <Button
                 loading={isSwitching}
