@@ -24,9 +24,21 @@ export const PROFIT_TAX_RATE = 0.3; // 30%
  * @returns 预估总收益
  */
 export function calcStakingReward(amount: number, days: number): number {
-  const dailyRate = STAKING_DAILY_RATES[days];
+  const dailyRate = getDailyRateForLockDays(days);
   if (!dailyRate) return 0;
   return amount * (dailyRate / 100) * days;
+}
+
+/**
+ * 根据锁仓天数匹配最接近的日化收益率
+ * 规则：取不超过该天数的最高档位。如 90 天 → 30 天档 0.5%，200 天 → 180 天档 1%
+ */
+export function getDailyRateForLockDays(days: number): number {
+  const tiers = [360, 180, 30, 7] as const;
+  for (const tier of tiers) {
+    if (days >= tier) return STAKING_DAILY_RATES[tier];
+  }
+  return 0;
 }
 
 /**

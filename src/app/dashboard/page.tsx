@@ -11,6 +11,7 @@ import { useAccount, useConnect, useDisconnect, useSwitchChain, useReadContract 
 import { ORDER_BOOK_ABI } from "@/constants/abis/OrderBook";
 import { ORDER_BOOK_ADDRESS } from "@/constants/contracts";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
+import { getDailyRateForLockDays, calcStakingReward } from "@/utils/calc";
 import {
   Megaphone,
   Copy,
@@ -45,7 +46,7 @@ export default function DashboardPage() {
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
 
-  // 读取用户的 OrderBook 订单
+  // 读取用户的 OrderBook 订单（Mini 版：id, amount, lockDays, createdAt）
   const { data: myOrders, isLoading: ordersLoading } = useReadContract({
     address: ORDER_BOOK_ADDRESS,
     abi: ORDER_BOOK_ABI,
@@ -54,8 +55,7 @@ export default function DashboardPage() {
     query: { enabled: !!address },
   });
   type ChainOrder = {
-    id: bigint; principal: bigint; totalReward: bigint; claimed: bigint;
-    nextRelease: bigint; duration: bigint; status: number; remark: string;
+    id: bigint; amount: bigint; lockDays: bigint; createdAt: bigint;
   };
   const orders = (myOrders as ChainOrder[] | undefined) ?? [];
 
@@ -167,7 +167,7 @@ export default function DashboardPage() {
           <FileText className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />认购记录
         </h2>
         {!isConnected || !address ? (
-          <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钉包</p></Card>
+          <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钱包</p></Card>
         ) : ordersLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-28 w-full" />
@@ -178,21 +178,24 @@ export default function DashboardPage() {
         ) : (
           <div className="space-y-3">
             {orders.map((o) => {
-              const principal = Number(o.principal) / 1e18;
-              const totalReward = Number(o.totalReward) / 1e18;
-              const claimed = Number(o.claimed) / 1e18;
-              const claimable = Math.max(0, totalReward - claimed);
-              // 进度条：基于时间（到期时间 - 锁定天数 = 开始时间）
-              const expiryTs = Number(o.nextRelease); // 秒
-              const durationSec = Number(o.duration) * 86400;
-              const startTs = expiryTs > 0 && durationSec > 0 ? expiryTs - durationSec : 0;
+              const amount = Number(o.amount) / 1e18;
+              const lockDays = Number(o.lockDays);
+              const createdSec = Number(o.createdAt);
+              const expirySec = createdSec + lockDays * 86400;
               const nowSec = nowMs / 1000;
-              const timeProgress = startTs > 0 && durationSec > 0
-                ? Math.min(100, Math.max(0, Math.round(((nowSec - startTs) / durationSec) * 100)))
+              const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
+              const expired = nowSec >= expirySec;
+              // 基于经济模型计算预估收益
+              const dailyRate = getDailyRateForLockDays(lockDays);
+              const estimatedReward = calcStakingReward(amount, lockDays);
+              // 进度条
+              const durationSec = lockDays * 86400;
+              const timeProgress = durationSec > 0
+                ? Math.min(100, Math.max(0, Math.round(((nowSec - createdSec) / durationSec) * 100)))
                 : 0;
-              const statusLabel = o.status === 0 ? "锁仓中" : o.status === 1 ? "已解锁" : "已完成";
-              const statusColor = o.status === 0 ? "bg-amber-orange/20 text-amber-orange" : o.status === 1 ? "bg-cyber-blue/20 text-cyber-blue" : "bg-accent-green/20 text-accent-green";
-              const expiryDate = expiryTs > 0 ? new Date(expiryTs * 1000).toLocaleDateString("zh-CN") : "—";
+              const statusLabel = expired ? "已到期" : "锁仓中";
+              const statusColor = expired ? "bg-accent-green/20 text-accent-green" : "bg-amber-orange/20 text-amber-orange";
+              const expiryDate = expirySec > 0 ? new Date(expirySec * 1000).toLocaleDateString("zh-CN") : "—";
               return (
                 <Card key={Number(o.id)} className="border-card-border">
                   {/* 头部: 编号 + 状态 */}
@@ -200,19 +203,19 @@ export default function DashboardPage() {
                     <span className="font-bold text-text-primary">#{Number(o.id)}</span>
                     <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium sm:text-xs ${statusColor}`}>{statusLabel}</span>
                   </div>
-                  {/* 两列数据 */}
+                  {/* 核心数据 */}
                   <div className="mb-3 grid grid-cols-2 gap-y-2 text-xs sm:text-sm">
                     <div>
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">认购本金</p>
-                      <p className="font-semibold text-text-primary">{principal.toLocaleString()}</p>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">SHD 数量</p>
+                      <p className="font-semibold text-text-primary">{amount.toLocaleString()} SHD</p>
                     </div>
                     <div className="text-right">
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">到期可取</p>
-                      <p className="font-semibold text-text-primary">{totalReward.toLocaleString()}</p>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">锁仓天数</p>
+                      <p className="font-semibold text-text-primary">{lockDays} 天</p>
                     </div>
                     <div>
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">已领取</p>
-                      <p className="font-semibold text-cyber-blue">{claimed.toLocaleString()}</p>
+                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">剩余天数</p>
+                      <p className="font-semibold text-cyber-blue">{expired ? "已释放" : `${remainDays} 天`}</p>
                     </div>
                     <div className="text-right">
                       <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">到期时间</p>
@@ -226,17 +229,22 @@ export default function DashboardPage() {
                     </div>
                     <div className="mt-1 flex justify-between text-[10px] text-text-muted">
                       <span>进度 {timeProgress}%</span>
-                      <span>{Number(o.duration)} 天后结束</span>
+                      <span>{expired ? "已到期" : `剩余 ${remainDays} 天`}</span>
                     </div>
                   </div>
-                  {/* 可提取 */}
-                  <div className="flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-2">
-                    <div>
-                      <p className="text-[10px] text-text-muted sm:text-xs">可提取 (SHD)</p>
-                      <p className="font-semibold text-cyber-blue">{claimable.toLocaleString()} SHD</p>
+                  {/* 预估收益（基于经济模型） */}
+                  <div className="rounded-lg bg-white/[0.04] px-3 py-2">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[10px] text-text-muted sm:text-xs">预估总收益（日化 {dailyRate}%）</p>
+                        <p className="font-semibold text-accent-green">{estimatedReward.toLocaleString(undefined, { maximumFractionDigits: 2 })} SHD</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-text-muted sm:text-xs">到期本息合计</p>
+                        <p className="font-semibold text-cyber-blue">{(amount + estimatedReward).toLocaleString(undefined, { maximumFractionDigits: 2 })} SHD</p>
+                      </div>
                     </div>
                   </div>
-                  {o.remark && <p className="mt-2 text-[10px] text-text-muted">{o.remark}</p>}
                 </Card>
               );
             })}

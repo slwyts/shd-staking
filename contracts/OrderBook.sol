@@ -3,26 +3,22 @@ pragma solidity ^0.8.20;
 
 /**
  * @title OrderBook
- * @notice 管理员拨币订单簿：管理员为用户添加/更新链上订单，用户可读取自己的订单。
+ * @notice Mini 版拨币订单簿：管理员录入（用户地址、SHD 数量、锁仓天数），
+ *         合约自动记录创建时间，到期后一次性释放。
  */
 contract OrderBook {
     address public admin;
 
     struct Order {
-        uint256 id;           // 订单编号（从1开始）
-        uint256 principal;    // 质押本金（18位精度）
-        uint256 totalReward;  // 总收益（18位精度）
-        uint256 claimed;      // 已领取（18位精度）
-        uint256 nextRelease;  // 下一次释放时间（Unix 时间戳）
-        uint256 duration;     // 锁定天数
-        uint8  status;        // 0=锁仓中 1=已解锁 2=已完成
-        string remark;        // 备注
+        uint256 id;          // 订单编号（从1开始）
+        uint256 amount;      // SHD 数量（18位精度）
+        uint256 lockDays;    // 锁仓天数
+        uint256 createdAt;   // 创建时间（Unix 时间戳，合约自动填写）
     }
 
     mapping(address => Order[]) private _orders;
 
     event OrderAdded(address indexed user, uint256 indexed id);
-    event OrderUpdated(address indexed user, uint256 indexed index);
     event AdminTransferred(address indexed oldAdmin, address indexed newAdmin);
 
     constructor() {
@@ -34,52 +30,22 @@ contract OrderBook {
         _;
     }
 
-    /// @notice 为用户添加一条订单
+    /// @notice 为用户添加一条锁仓订单
     function addOrder(
         address user,
-        uint256 principal,
-        uint256 totalReward,
-        uint256 nextRelease,
-        uint256 duration,
-        uint8  status,
-        string calldata remark
+        uint256 amount,
+        uint256 lockDays
     ) external onlyAdmin {
+        require(amount > 0, "OrderBook: zero amount");
+        require(lockDays > 0, "OrderBook: zero lock days");
         uint256 newId = _orders[user].length + 1;
         _orders[user].push(Order({
-            id:          newId,
-            principal:   principal,
-            totalReward: totalReward,
-            claimed:     0,
-            nextRelease: nextRelease,
-            duration:    duration,
-            status:      status,
-            remark:      remark
+            id:        newId,
+            amount:    amount,
+            lockDays:  lockDays,
+            createdAt: block.timestamp
         }));
         emit OrderAdded(user, newId);
-    }
-
-    /// @notice 修改已有订单（按数组下标）
-    function updateOrder(
-        address user,
-        uint256 index,
-        uint256 principal,
-        uint256 totalReward,
-        uint256 claimed,
-        uint256 nextRelease,
-        uint256 duration,
-        uint8  status,
-        string calldata remark
-    ) external onlyAdmin {
-        require(index < _orders[user].length, "OrderBook: index out of bounds");
-        Order storage o = _orders[user][index];
-        o.principal   = principal;
-        o.totalReward = totalReward;
-        o.claimed     = claimed;
-        o.nextRelease = nextRelease;
-        o.duration    = duration;
-        o.status      = status;
-        o.remark      = remark;
-        emit OrderUpdated(user, index);
     }
 
     /// @notice 读取某用户的全部订单

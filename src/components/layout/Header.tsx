@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { Languages, Wallet, LogOut } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useLocale } from "@/providers/LocaleProvider";
@@ -12,7 +13,11 @@ function WalletButton() {
   const { connect, connectors, isPending: isConnecting } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
 
-  if (isConnected && address) {
+  // 延迟到客户端渲染已连接状态，避免 SSR 水合不匹配
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (mounted && isConnected && address) {
     return (
       <div className="flex items-center gap-1 sm:gap-1.5">
         <div className="flex items-center gap-1 rounded-lg border border-accent-green/30 bg-accent-green/5 px-2 py-1.5 sm:gap-1.5 sm:px-3">

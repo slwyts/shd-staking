@@ -1,6 +1,6 @@
 /**
  * @file constants/abis/OrderBook.ts
- * @description 后台订单簿合约 ABI（对应 contracts/OrderBook.sol）
+ * @description Mini 版订单簿合约 ABI（对应 contracts/OrderBook.sol）
  */
 export const ORDER_BOOK_ABI = [
   {
@@ -19,30 +19,9 @@ export const ORDER_BOOK_ABI = [
     type: "function",
     name: "addOrder",
     inputs: [
-      { name: "user",        type: "address" },
-      { name: "principal",   type: "uint256" },
-      { name: "totalReward", type: "uint256" },
-      { name: "nextRelease", type: "uint256" },
-      { name: "duration",    type: "uint256" },
-      { name: "status",      type: "uint8"   },
-      { name: "remark",      type: "string"  },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "updateOrder",
-    inputs: [
-      { name: "user",        type: "address" },
-      { name: "index",       type: "uint256" },
-      { name: "principal",   type: "uint256" },
-      { name: "totalReward", type: "uint256" },
-      { name: "claimed",     type: "uint256" },
-      { name: "nextRelease", type: "uint256" },
-      { name: "duration",    type: "uint256" },
-      { name: "status",      type: "uint8"   },
-      { name: "remark",      type: "string"  },
+      { name: "user",     type: "address" },
+      { name: "amount",   type: "uint256" },
+      { name: "lockDays", type: "uint256" },
     ],
     outputs: [],
     stateMutability: "nonpayable",
@@ -56,14 +35,10 @@ export const ORDER_BOOK_ABI = [
         name: "",
         type: "tuple[]",
         components: [
-          { name: "id",          type: "uint256" },
-          { name: "principal",   type: "uint256" },
-          { name: "totalReward", type: "uint256" },
-          { name: "claimed",     type: "uint256" },
-          { name: "nextRelease", type: "uint256" },
-          { name: "duration",    type: "uint256" },
-          { name: "status",      type: "uint8"   },
-          { name: "remark",      type: "string"  },
+          { name: "id",        type: "uint256" },
+          { name: "amount",    type: "uint256" },
+          { name: "lockDays",  type: "uint256" },
+          { name: "createdAt", type: "uint256" },
         ],
       },
     ],
@@ -82,14 +57,6 @@ export const ORDER_BOOK_ABI = [
     inputs: [
       { name: "user", type: "address", indexed: true },
       { name: "id",   type: "uint256", indexed: true },
-    ],
-  },
-  {
-    type: "event",
-    name: "OrderUpdated",
-    inputs: [
-      { name: "user",  type: "address", indexed: true },
-      { name: "index", type: "uint256", indexed: true },
     ],
   },
   {
