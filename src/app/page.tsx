@@ -5,13 +5,6 @@ import { StarBackground } from "@/components/three/StarBackground";
 import { Badge } from "@/components/ui/Badge";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
 import { ALL_TOKENS } from "@/constants/tokens";
-import { STAKING_DAILY_RATES } from "@/utils/calc";
-
-const STAKING_PERIODS = [
-  { days: 90, label: "90 天", rate: STAKING_DAILY_RATES[90] },
-  { days: 180, label: "180 天", rate: STAKING_DAILY_RATES[180] },
-  { days: 360, label: "360 天", rate: STAKING_DAILY_RATES[360] },
-];
 
 export default function HomePage() {
   return (
@@ -66,43 +59,6 @@ export default function HomePage() {
                 </AnimatedSection>
               ))}
             </div>
-          </section>
-
-          {/* 贡献收益 */}
-          <section className="relative py-5 sm:py-10">
-            <div className="pointer-events-none absolute -right-20 top-10 h-60 w-60 rounded-full bg-cyber-purple/8 blur-[120px]" />
-
-            <AnimatedSection direction="up">
-              <div className="text-center">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-accent-green sm:text-xs">Rewards</p>
-                <h2 className="mb-1 text-lg font-bold text-text-primary sm:text-xl">贡献收益</h2>
-                <p className="mx-auto mb-4 max-w-md text-[10px] leading-relaxed text-text-muted sm:mb-8 sm:text-sm">选择不同周期获取静态收益</p>
-              </div>
-            </AnimatedSection>
-
-            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:gap-8 lg:grid-cols-3">
-              {STAKING_PERIODS.map((period, i) => (
-                <AnimatedSection key={period.days} direction="up" delay={0.08 * (i + 1)}>
-                  <div className="group text-center">
-                    <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted sm:text-xs">{period.label}</p>
-                    <p className="mt-1 text-2xl font-black text-cyber-blue transition-transform duration-300 group-hover:scale-105 sm:mt-2 sm:text-4xl">
-                      {period.rate}%
-                    </p>
-                    <p className="mt-0.5 text-[10px] text-text-secondary sm:mt-1 sm:text-sm">日补贴</p>
-                    <div className="mx-auto mt-2 h-px w-8 rounded-full bg-cyber-blue/30 sm:mt-3 sm:w-12" />
-                  </div>
-                </AnimatedSection>
-              ))}
-            </div>
-
-            <AnimatedSection direction="up" delay={0.2} className="mt-5 text-center sm:mt-8">
-              <a
-                href="/staking"
-                className="inline-flex w-full items-center justify-center rounded-2xl bg-cyber-blue px-8 py-3 text-sm font-semibold text-white shadow-[0_0_24px_rgba(59,130,246,0.25)] transition-all duration-300 hover:bg-cyber-blue/90 hover:shadow-[0_0_32px_rgba(59,130,246,0.4)] active:scale-[0.97] sm:w-auto sm:py-3.5"
-              >
-                立即认购
-              </a>
-            </AnimatedSection>
           </section>
 
           {/* SHD 报单产品包 */}
