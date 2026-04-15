@@ -69,9 +69,9 @@ export default function HomePage() {
               <div className="text-center">
                 <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-cyber-blue sm:text-xs">SHD Order</p>
                 <h2 className="mb-1 text-lg font-bold text-text-primary sm:text-xl">SHD 报单产品包</h2>
-                <p className="mx-auto mb-4 max-w-2xl text-[10px] leading-relaxed text-text-muted sm:mb-8 sm:text-sm">
+                {/* <p className="mx-auto mb-4 max-w-2xl text-[10px] leading-relaxed text-text-muted sm:mb-8 sm:text-sm">
                   通过 DAPP 使用 SHD 购买报单产品包，购买数据与用户 UID 同步至商城 APP。
-                </p>
+                </p> */}
               </div>
             </AnimatedSection>
 
@@ -91,10 +91,10 @@ export default function HomePage() {
                   ))}
                 </div>
 
-                <div className="mt-4 space-y-2 text-[10px] leading-relaxed text-text-secondary sm:mt-5 sm:space-y-2.5 sm:text-sm">
+                {/* <div className="mt-4 space-y-2 text-[10px] leading-relaxed text-text-secondary sm:mt-5 sm:space-y-2.5 sm:text-sm">
                   <p>1. 根据 SHD-SCNY 获取 SHD 实时价格，扣除对应数量 SHD。</p>
                   <p>2. 同步 UID 与报单产品包数据接口给 APP，APP 发放对应权益。</p>
-                </div>
+                </div> */}
               </div>
             </AnimatedSection>
           </section>
