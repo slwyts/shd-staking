@@ -8,8 +8,7 @@ import { ALL_TOKENS } from "@/constants/tokens";
 import { STAKING_DAILY_RATES } from "@/utils/calc";
 
 const STAKING_PERIODS = [
-  { days: 7, label: "7 天", rate: STAKING_DAILY_RATES[7] },
-  { days: 30, label: "30 天", rate: STAKING_DAILY_RATES[30] },
+  { days: 90, label: "90 天", rate: STAKING_DAILY_RATES[90] },
   { days: 180, label: "180 天", rate: STAKING_DAILY_RATES[180] },
   { days: 360, label: "360 天", rate: STAKING_DAILY_RATES[360] },
 ];
@@ -81,7 +80,7 @@ export default function HomePage() {
               </div>
             </AnimatedSection>
 
-            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:gap-8 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-4 sm:gap-8 lg:grid-cols-3">
               {STAKING_PERIODS.map((period, i) => (
                 <AnimatedSection key={period.days} direction="up" delay={0.08 * (i + 1)}>
                   <div className="group text-center">
@@ -89,7 +88,7 @@ export default function HomePage() {
                     <p className="mt-1 text-2xl font-black text-cyber-blue transition-transform duration-300 group-hover:scale-105 sm:mt-2 sm:text-4xl">
                       {period.rate}%
                     </p>
-                    <p className="mt-0.5 text-[10px] text-text-secondary sm:mt-1 sm:text-sm">日化收益率</p>
+                    <p className="mt-0.5 text-[10px] text-text-secondary sm:mt-1 sm:text-sm">日补贴</p>
                     <div className="mx-auto mt-2 h-px w-8 rounded-full bg-cyber-blue/30 sm:mt-3 sm:w-12" />
                   </div>
                 </AnimatedSection>
@@ -103,6 +102,44 @@ export default function HomePage() {
               >
                 立即认购
               </a>
+            </AnimatedSection>
+          </section>
+
+          {/* SHD 报单产品包 */}
+          <section className="relative py-5 sm:py-10">
+            <div className="pointer-events-none absolute -right-16 bottom-0 h-56 w-56 rounded-full bg-accent-green/8 blur-[110px]" />
+
+            <AnimatedSection direction="up">
+              <div className="text-center">
+                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.3em] text-cyber-blue sm:text-xs">SHD Order</p>
+                <h2 className="mb-1 text-lg font-bold text-text-primary sm:text-xl">SHD 报单产品包</h2>
+                <p className="mx-auto mb-4 max-w-2xl text-[10px] leading-relaxed text-text-muted sm:mb-8 sm:text-sm">
+                  通过 DAPP 使用 SHD 购买报单产品包，购买数据与用户 UID 同步至商城 APP。
+                </p>
+              </div>
+            </AnimatedSection>
+
+            <AnimatedSection direction="up" delay={0.08}>
+              <div className="rounded-2xl border border-card-border bg-white/5 p-4 sm:p-6">
+                <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-5 sm:gap-3">
+                  {[
+                    "5000 产品包",
+                    "1W 产品包",
+                    "3W 产品包",
+                    "5W 产品包",
+                    "10W 产品包",
+                  ].map((pkg) => (
+                    <div key={pkg} className="rounded-xl border border-cyber-blue/20 bg-cyber-blue/5 px-2 py-2 text-[10px] font-semibold text-cyber-blue sm:py-2.5 sm:text-xs">
+                      {pkg}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 space-y-2 text-[10px] leading-relaxed text-text-secondary sm:mt-5 sm:space-y-2.5 sm:text-sm">
+                  <p>1. 根据 SHD-SCNY 获取 SHD 实时价格，扣除对应数量 SHD。</p>
+                  <p>2. 同步 UID 与报单产品包数据接口给 APP，APP 发放对应权益。</p>
+                </div>
+              </div>
             </AnimatedSection>
           </section>
 
@@ -121,8 +158,8 @@ export default function HomePage() {
             <AnimatedSection direction="up" delay={0.1}>
               <div className="text-center">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-text-muted sm:text-xs">直接推荐收益</p>
-                <p className="mt-1.5 text-4xl font-black text-cyber-blue sm:mt-3 sm:text-5xl">10%</p>
-                <p className="mt-1 text-[10px] leading-relaxed text-text-secondary sm:mt-2 sm:text-sm">直推下级认购金额的 10% 作为奖励</p>
+                <p className="mt-1.5 text-4xl font-black text-cyber-blue sm:mt-3 sm:text-5xl">5%</p>
+                <p className="mt-1 text-[10px] leading-relaxed text-text-secondary sm:mt-2 sm:text-sm">直推下级认购金额的 5% 作为奖励</p>
                 <div className="mx-auto mt-2.5 h-px w-12 rounded-full bg-amber-orange/30 sm:mt-4 sm:w-16" />
               </div>
             </AnimatedSection>

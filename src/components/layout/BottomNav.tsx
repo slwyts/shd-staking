@@ -8,7 +8,7 @@ const NAV_ITEMS = [
   { label: "首页", href: "/", icon: Home },
   { label: "认购", href: "/staking", icon: Lock },
   { label: "团队", href: "/team", icon: Users },
-  { label: "公告", href: "/news", icon: Megaphone },
+  { label: "打新", href: "/news", icon: Megaphone },
   { label: "我的", href: "/dashboard", icon: UserCircle },
 ] as const;
 

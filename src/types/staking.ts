@@ -4,7 +4,7 @@
  */
 
 /** 质押周期枚举 */
-export type StakingPeriod = 7 | 30 | 180 | 360;
+export type StakingPeriod = 7 | 30 | 90 | 180 | 360;
 
 /** 质押池信息 */
 export interface StakingPool {

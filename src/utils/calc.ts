@@ -7,6 +7,7 @@
 export const STAKING_DAILY_RATES: Record<number, number> = {
   7: 0.3,
   30: 0.5,
+  90: 0.5,
   180: 1.0,
   360: 1.2,
 };
@@ -31,10 +32,10 @@ export function calcStakingReward(amount: number, days: number): number {
 
 /**
  * 根据锁仓天数匹配最接近的日化收益率
- * 规则：取不超过该天数的最高档位。如 90 天 → 30 天档 0.5%，200 天 → 180 天档 1%
+ * 规则：取不超过该天数的最高档位。如 90 天 → 90 天档 0.5%，200 天 → 180 天档 1%
  */
 export function getDailyRateForLockDays(days: number): number {
-  const tiers = [360, 180, 30, 7] as const;
+  const tiers = [360, 180, 90, 30, 7] as const;
   for (const tier of tiers) {
     if (days >= tier) return STAKING_DAILY_RATES[tier];
   }

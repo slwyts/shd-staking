@@ -29,8 +29,7 @@ import type { StakingPeriod } from "@/types/staking";
 
 /** 周期选项卡数据 */
 const PERIOD_TABS = [
-  { key: "7", label: "7 天" },
-  { key: "30", label: "30 天" },
+  { key: "90", label: "90 天" },
   { key: "180", label: "180 天" },
   { key: "360", label: "360 天" },
 ];
@@ -49,7 +48,7 @@ function StakingPageInner() {
     isConfirmed: isApproveConfirmed,
   } = useTokenApproval(SHD_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS);
 
-  const [selectedPeriod, setSelectedPeriod] = useState<string>("30");
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("90");
   const [amount, setAmount] = useState("");
   const [referrer, setReferrer] = useState("");
 
@@ -131,7 +130,7 @@ function StakingPageInner() {
                   className="w-full"
                 />
                 <div className="mt-3 sm:mt-4">
-                  <Badge variant="blue" pulse>日化 {dailyRate}%</Badge>
+                  <Badge variant="blue" pulse>日补贴 {dailyRate}%</Badge>
                 </div>
               </Card>
             </div>
@@ -229,7 +228,7 @@ function StakingPageInner() {
                     </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-xs text-text-muted sm:text-sm">日化收益率</span>
+                    <span className="text-xs text-text-muted sm:text-sm">日补贴</span>
                     <span className="text-xs font-medium text-cyber-blue sm:text-sm">
                       {dailyRate}%
                     </span>
