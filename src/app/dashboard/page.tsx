@@ -40,6 +40,15 @@ import { siteConfig } from "@/config/site";
 
 const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
 
+/**
+ * 前端隐藏的撤销订单（合约无删除能力，临时前端屏蔽）。
+ * key = 用户地址(小写), value = 需隐藏的订单 id 集合。
+ */
+const HIDDEN_ORDERS: Record<string, Set<number>> = {
+  "0x88110713b8d3cde7f20699806c443cad0f6027d6": new Set([2]), // 撤销6万-填错账号
+  "0xefadd786d55ad1904a3684d7080598ed4f650403": new Set([3]), // 撤销6千-重复一笔
+};
+
 function getOrderTypeLabel(orderType: number) {
   return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "认购锁仓" : "未知类型";
 }
@@ -62,7 +71,9 @@ export default function DashboardPage() {
   type ChainOrder = {
     id: bigint; orderType: bigint; amount: bigint; lockDays: bigint; createdAt: bigint;
   };
-  const orders = (myOrders as ChainOrder[] | undefined) ?? [];
+  const allOrders = (myOrders as ChainOrder[] | undefined) ?? [];
+  const hiddenSet = address ? HIDDEN_ORDERS[address.toLowerCase()] : undefined;
+  const orders = hiddenSet ? allOrders.filter((o) => !hiddenSet.has(Number(o.id))) : allOrders;
 
   // 每分钟刷新一次「当前时间」，驱动进度条更新
   const [nowMs, setNowMs] = useState(0);
