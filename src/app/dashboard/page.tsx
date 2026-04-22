@@ -47,6 +47,7 @@ const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
 const HIDDEN_ORDERS: Record<string, Set<number>> = {
   "0x88110713b8d3cde7f20699806c443cad0f6027d6": new Set([2]), // 撤销6万-填错账号
   "0xefadd786d55ad1904a3684d7080598ed4f650403": new Set([3]), // 撤销6千-重复一笔
+  "0xb175f3d162e2712e654bf31232b92191eef06e67": new Set([1]), // 撤销5千-多拨
 };
 
 function getOrderTypeLabel(orderType: number) {
