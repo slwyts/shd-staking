@@ -1,12 +1,12 @@
 /**
  * @file config/chains.ts
- * @description DOR Network 自定义链定义。
- *   项目方专属公链参数，包含 RPC、区块浏览器等网络信息。
+ * @description DApp 链定义，根据 NEXT_PUBLIC_APP_MODE 选择开发链或生产链。
  */
 import { defineChain } from "viem";
+import { isDevelopmentMode } from "./appMode";
 
-/** DOR Network — 项目方专属公链 */
-export const dorNetwork = defineChain({
+/** DOR Network — 生产链 */
+export const productionDorNetwork = defineChain({
   id: 6860686,
   name: "DOR Network",
   nativeCurrency: {
@@ -27,3 +27,22 @@ export const dorNetwork = defineChain({
     },
   },
 });
+
+/** Hardhat Local — 本地开发链 */
+export const developmentDorNetwork = defineChain({
+  id: 31337,
+  name: "Hardhat Local",
+  nativeCurrency: {
+    name: "DOR",
+    symbol: "DOR",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: {
+      http: ["http://127.0.0.1:8545"],
+    },
+  },
+});
+
+/** 当前 DApp 模式使用的目标链。 */
+export const dorNetwork = isDevelopmentMode ? developmentDorNetwork : productionDorNetwork;

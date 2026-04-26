@@ -3,6 +3,7 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { Wallet, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { dorNetwork } from "@/config/chains";
 import { formatAddress } from "@/utils/format";
 
 type ConnectButtonSize = "sm" | "md" | "lg";
@@ -27,7 +28,7 @@ export function ConnectButton({
 
   const onConnect = () => {
     const connector = connectors[0];
-    if (connector) connect({ connector });
+    if (connector) connect({ connector, chainId: dorNetwork.id });
   };
 
   if (isConnected && address) {

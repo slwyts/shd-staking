@@ -12,10 +12,6 @@ export interface VLevelConfig {
   level: VLevel;
   /** 等级名称 */
   label: string;
-  /** 展示用比例 (%)，实际团队极差按质押周期决定 */
-  rate: number;
-  /** 保留字段，当前等级由后台导入 */
-  requiredMinorPerformance: number;
 }
 
 /** 团队信息 */
@@ -38,8 +34,8 @@ export interface TeamInfo {
 
 /** 区域代理等级配置表 */
 export const V_LEVEL_CONFIG: VLevelConfig[] = [
-  { level: 0, label: "普通用户", rate: 0, requiredMinorPerformance: 0 },
-  { level: 1, label: "区县代理", rate: 0, requiredMinorPerformance: 0 },
-  { level: 2, label: "市级代理", rate: 0, requiredMinorPerformance: 0 },
-  { level: 3, label: "省级代理", rate: 0, requiredMinorPerformance: 0 },
+  { level: 0, label: "普通用户" },
+  { level: 1, label: "区县代理" },
+  { level: 2, label: "市级代理" },
+  { level: 3, label: "省级代理" },
 ];

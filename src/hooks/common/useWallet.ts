@@ -7,6 +7,7 @@
 "use client";
 
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { dorNetwork } from "@/config/chains";
 
 /**
  * useWallet — 钱包状态与操作的统一封装
@@ -20,7 +21,7 @@ export function useWallet() {
   /** 调用第一个可用连接器进行连接 */
   const connectWallet = () => {
     const connector = connectors[0];
-    if (connector) connect({ connector });
+    if (connector) connect({ connector, chainId: dorNetwork.id });
   };
 
   return {

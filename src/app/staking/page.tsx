@@ -23,7 +23,7 @@ import { useTokenBalance } from "@/hooks/token/useTokenBalance";
 import { useTokenApproval } from "@/hooks/token/useTokenApproval";
 import { DAPP_ABI } from "@/constants/abis/generated";
 import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
-import { calcStakingReward, STAKING_DAILY_RATES } from "@/utils/calc";
+import { useStakingPools } from "@/hooks/staking/useStakingPools";
 import { formatAddress, formatTokenAmount } from "@/utils/format";
 import type { StakingPeriod } from "@/types/staking";
 
@@ -40,6 +40,7 @@ function StakingPageInner() {
   const { address, isConnected, connectWallet } = useWallet();
   const { shdTokenAddress } = useDappTokenAddress();
   const { stake, isSending, isConfirming, isConfirmed } = useStake();
+  const { getPool, isLoading: poolsLoading } = useStakingPools();
   const { balance: shdBalance } = useTokenBalance(shdTokenAddress);
   const { data: boundReferrer, isLoading: isReferrerLoading } = useReadContract({
     address: DAPP_CONTRACT_ADDRESS,
@@ -64,13 +65,16 @@ function StakingPageInner() {
   const hasBoundReferrer = !!boundReferrerAddress && boundReferrerAddress !== ZERO_ADDRESS;
 
   const periodDays = Number(selectedPeriod) as StakingPeriod;
-  const dailyRate = STAKING_DAILY_RATES[periodDays] ?? 0;
+  const selectedPool = getPool(periodDays);
+  const dailyRate = selectedPool?.dailyRate ?? 0;
+  const poolActive = !!selectedPool?.isActive;
   const numericAmount = parseFloat(amount) || 0;
 
-  const estimatedReward = useMemo(
-    () => calcStakingReward(numericAmount, periodDays),
-    [numericAmount, periodDays]
+  const estimatedGrossReward = useMemo(
+    () => numericAmount * (dailyRate / 100) * periodDays,
+    [dailyRate, numericAmount, periodDays]
   );
+  const estimatedUserReward = estimatedGrossReward / 2;
 
   const handleMax = useCallback(() => {
     if (shdBalance) {
@@ -92,6 +96,10 @@ function StakingPageInner() {
     setStakeMsg(null);
     if (!hasBoundReferrer) {
       setStakeMsg("请先在个人中心绑定上级");
+      return;
+    }
+    if (!poolActive) {
+      setStakeMsg("当前认购周期未开放");
       return;
     }
     if (!shdTokenAddress) {
@@ -131,8 +139,14 @@ function StakingPageInner() {
                   onChange={setSelectedPeriod}
                   className="w-full"
                 />
-                <div className="mt-3 sm:mt-4">
-                  <Badge variant="blue" pulse>日补贴 {dailyRate}%</Badge>
+                <div className="mt-3 flex flex-wrap gap-2 sm:mt-4">
+                  <Badge variant={poolActive ? "blue" : "gray"} pulse={poolActive}>日补贴 {dailyRate}%</Badge>
+                  <Badge variant={poolActive ? "green" : "orange"}>{poolActive ? "链上开放" : "链上暂停"}</Badge>
+                  {poolsLoading ? (
+                    <Badge variant="gray">读取池子中</Badge>
+                  ) : (
+                    <Badge variant="gray">池内 {formatTokenAmount(selectedPool?.totalStaked ?? BigInt(0), 18, 2)} SHD</Badge>
+                  )}
                 </div>
               </Card>
             </div>
@@ -218,7 +232,7 @@ function StakingPageInner() {
                 <Button
                   onClick={handleStake}
                   loading={isSending || isConfirming}
-                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer}
+                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer || !poolActive}
                   className="flex-1"
                 >
                   {isConfirming
@@ -258,6 +272,12 @@ function StakingPageInner() {
                       {dailyRate}%
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-text-muted sm:text-sm">池状态</span>
+                    <span className={`text-xs font-medium sm:text-sm ${poolActive ? "text-accent-green" : "text-amber-orange"}`}>
+                      {poolActive ? "开放" : "暂停"}
+                    </span>
+                  </div>
                   <hr className="border-card-border" />
                   <div className="flex justify-between">
                     <span className="text-xs text-text-muted sm:text-sm">每日收益</span>
@@ -265,12 +285,18 @@ function StakingPageInner() {
                       {(numericAmount * dailyRate / 100).toFixed(4)} SHD
                     </span>
                   </div>
+                  <div className="flex justify-between">
+                    <span className="text-xs text-text-muted sm:text-sm">预估静态收益</span>
+                    <span className="text-xs font-medium text-text-primary sm:text-sm">
+                      {estimatedGrossReward.toFixed(4)} SHD
+                    </span>
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-text-secondary sm:text-sm">
-                      预估到期可取
+                      预估到期实得收益
                     </span>
                     <span className={`text-base font-bold text-cyber-blue transition-all duration-500 sm:text-lg ${numericAmount > 0 ? "scale-110" : ""}`}>
-                      {estimatedReward.toFixed(4)} SHD
+                      {estimatedUserReward.toFixed(4)} SHD
                     </span>
                   </div>
                 </div>

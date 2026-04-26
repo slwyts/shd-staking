@@ -48,7 +48,6 @@ export function useMyPositions() {
         startTime: Number(p.startTime),
         endTime: Number(p.endTime),
         claimedReward: p.claimedReward,
-        pendingReward: BigInt(0),
         isUnstaked: p.isUnstaked,
         referrer: p.referrer,
         directReferralReward: p.directReferralReward,

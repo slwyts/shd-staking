@@ -3,12 +3,13 @@
  * @description DApp 合约地址配置。前端只需要知道入口合约地址。
  */
 import { getAddress, isAddress } from "viem";
+import { appMode } from "@/config/appMode";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
 function readRequiredAddress(name: string, value: string | undefined) {
   if (!value || !isAddress(value) || getAddress(value) === ZERO_ADDRESS) {
-    throw new Error(`${name} must be set to a deployed contract address`);
+    throw new Error(`${name} must be set to a deployed contract address for NEXT_PUBLIC_APP_MODE=${appMode}`);
   }
 
   return getAddress(value) as `0x${string}`;

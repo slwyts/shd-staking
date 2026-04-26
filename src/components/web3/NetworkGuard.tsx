@@ -36,13 +36,13 @@ export function NetworkGuard({ children }: NetworkGuardProps) {
             网络不匹配
           </h3>
           <p className="mb-6 text-sm text-text-secondary">
-            请切换至 DOR Network 以使用本平台
+            请切换至 {dorNetwork.name} 以使用本平台
           </p>
           <Button
             loading={isPending}
             onClick={() => switchChain({ chainId: dorNetwork.id })}
           >
-            切换至 DOR Network
+            切换至 {dorNetwork.name}
           </Button>
         </Card>
       </div>

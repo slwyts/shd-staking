@@ -32,8 +32,6 @@ export interface StakingPosition {
   endTime: number;
   /** 已领取收益 */
   claimedReward: bigint;
-  /** 待领取收益 */
-  pendingReward: bigint;
   /** 是否已解除 */
   isUnstaked: boolean;
   /** 本单绑定的直接上级 */

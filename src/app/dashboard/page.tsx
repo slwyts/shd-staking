@@ -32,10 +32,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Loading";
 import { useMyPositions } from "@/hooks/dashboard/useMyPositions";
-import { STORAGE_PREFERRED_REFERRER } from "@/constants/storageKeys";
+import { useMyRewards } from "@/hooks/dashboard/useMyRewards";
+import { useStakingRewards } from "@/hooks/staking/useStakingRewards";
 import { formatAddress, formatTokenAmount } from "@/utils/format";
 import { dorNetwork } from "@/config/chains";
 import { siteConfig } from "@/config/site";
+import type { StakingPosition } from "@/types/staking";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
@@ -44,11 +46,130 @@ function getInitialReferrerInput() {
   try {
     const urlRef = new URLSearchParams(window.location.search).get("ref");
     if (urlRef && isAddress(urlRef)) return urlRef;
-    const savedReferrer = localStorage.getItem(STORAGE_PREFERRED_REFERRER);
-    return savedReferrer && isAddress(savedReferrer) ? savedReferrer : "";
+    return "";
   } catch {
     return "";
   }
+}
+
+function PositionCard({
+  position,
+  nowMs,
+  onSettled,
+}: {
+  position: StakingPosition;
+  nowMs: number;
+  onSettled: () => void;
+}) {
+  const {
+    settlementQuote,
+    pendingReward,
+    burnAmount,
+    directReferralRecovery,
+    payout,
+    isEarlySettlement,
+    settlePosition,
+    isSettling,
+    isConfirming,
+    isSettled,
+  } = useStakingRewards(position.isUnstaked ? undefined : position.id);
+
+  useEffect(() => {
+    if (isSettled) onSettled();
+  }, [isSettled, onSettled]);
+
+  const createdSec = position.startTime;
+  const expirySec = position.endTime;
+  const nowSec = nowMs / 1000;
+  const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
+  const expired = position.isUnstaked || nowSec >= expirySec;
+  const durationSec = Math.max(1, expirySec - createdSec);
+  const timeProgress = durationSec > 0
+    ? Math.min(100, Math.max(0, Math.round(((nowSec - createdSec) / durationSec) * 100)))
+    : 0;
+  const statusLabel = position.isUnstaked ? "已结算" : expired ? "已到期" : "锁仓中";
+  const statusColor = expired ? "bg-accent-green/20 text-accent-green" : "bg-amber-orange/20 text-amber-orange";
+  const expiryDate = expirySec > 0 ? new Date(expirySec * 1000).toLocaleDateString("zh-CN") : "—";
+  const settlementBusy = isSettling || isConfirming;
+
+  return (
+    <Card className="border-card-border">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-text-primary">#{position.id}</span>
+          <span className="rounded-md bg-cyber-blue/15 px-2 py-0.5 text-[10px] font-medium text-cyber-blue sm:text-xs">
+            SHD 认购
+          </span>
+        </div>
+        <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium sm:text-xs ${statusColor}`}>{statusLabel}</span>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-y-2 text-xs sm:text-sm">
+        <div>
+          <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">SHD 数量</p>
+          <p className="font-semibold text-text-primary">{formatTokenAmount(position.amount, 18, 2)} SHD</p>
+        </div>
+        <div className="text-right">
+          <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">锁仓天数</p>
+          <p className="font-semibold text-text-primary">{position.period} 天</p>
+        </div>
+        <div>
+          <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">剩余天数</p>
+          <p className="font-semibold text-cyber-blue">{expired ? "已释放" : `${remainDays} 天`}</p>
+        </div>
+        <div className="text-right">
+          <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">到期时间</p>
+          <p className="font-semibold text-text-primary">{expiryDate}</p>
+        </div>
+      </div>
+
+      <div className="mb-3">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-cyber-blue transition-[width] duration-700" style={{ width: `${timeProgress}%` }} />
+        </div>
+        <div className="mt-1 flex justify-between text-[10px] text-text-muted">
+          <span>进度 {timeProgress}%</span>
+          <span>{expired ? statusLabel : `剩余 ${remainDays} 天`}</span>
+        </div>
+      </div>
+
+      {!position.isUnstaked && (
+        <div className="space-y-2 border-t border-card-border pt-3">
+          <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
+            <div className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+              <p className="text-text-muted">可得静态收益</p>
+              <p className="mt-0.5 font-semibold text-accent-green">{formatTokenAmount(pendingReward ?? BigInt(0), 18, 4)} SHD</p>
+            </div>
+            <div className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+              <p className="text-text-muted">预计到账</p>
+              <p className="mt-0.5 font-semibold text-cyber-blue">{formatTokenAmount(payout ?? BigInt(0), 18, 4)} SHD</p>
+            </div>
+            {(burnAmount ?? BigInt(0)) > BigInt(0) && (
+              <div className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+                <p className="text-text-muted">盈利税销毁</p>
+                <p className="mt-0.5 font-semibold text-amber-orange">{formatTokenAmount(burnAmount ?? BigInt(0), 18, 4)} SHD</p>
+              </div>
+            )}
+            {(directReferralRecovery ?? BigInt(0)) > BigInt(0) && (
+              <div className="rounded-lg bg-white/[0.04] px-2.5 py-2">
+                <p className="text-text-muted">提前结算追扣</p>
+                <p className="mt-0.5 font-semibold text-amber-orange">{formatTokenAmount(directReferralRecovery ?? BigInt(0), 18, 4)} SHD</p>
+              </div>
+            )}
+          </div>
+          <Button
+            className="w-full"
+            variant={isEarlySettlement ? "secondary" : "primary"}
+            loading={settlementBusy}
+            disabled={!settlementQuote}
+            onClick={settlePosition}
+          >
+            {isConfirming ? "结算确认中..." : isEarlySettlement ? "提前结算" : "到期结算"}
+          </Button>
+        </div>
+      )}
+    </Card>
+  );
 }
 
 export default function DashboardPage() {
@@ -57,7 +178,8 @@ export default function DashboardPage() {
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
-  const { positions, isLoading: positionsLoading } = useMyPositions();
+  const { positions, isLoading: positionsLoading, refetch: refetchPositions } = useMyPositions();
+  const { rewards, isLoading: rewardsLoading, refetch: refetchRewards } = useMyRewards();
 
   const { data: boundReferrerRaw, refetch: refetchBoundReferrer } = useReadContract({
     address: DAPP_CONTRACT_ADDRESS,
@@ -93,10 +215,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!isBindReferrerSuccess) return;
     void refetchBoundReferrer();
-    try {
-      localStorage.setItem(STORAGE_PREFERRED_REFERRER, refInput.trim());
-    } catch { /* */ }
-  }, [isBindReferrerSuccess, refInput, refetchBoundReferrer]);
+  }, [isBindReferrerSuccess, refetchBoundReferrer]);
+
+  const refreshDashboardData = useCallback(() => {
+    void refetchPositions();
+    void refetchRewards();
+  }, [refetchPositions, refetchRewards]);
 
   const bindRefMessage = isBindReferrerSuccess ? "链上绑定成功" : refMsg;
 
@@ -204,6 +328,42 @@ export default function DashboardPage() {
         </Card>
       </section>
 
+      {/* ===== 收益统计 ===== */}
+      <section className="mb-6 animate-slide-up opacity-0 sm:mb-8" style={{ animationDelay: "0.25s" }}>
+        <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
+          <Wallet className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />收益统计
+        </h2>
+        {!isConnected || !address ? (
+          <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钱包</p></Card>
+        ) : rewardsLoading ? (
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+            <Card>
+              <p className="text-[10px] text-text-muted sm:text-xs">静态收益</p>
+              <p className="mt-1 text-sm font-semibold text-text-primary sm:text-base">{formatTokenAmount(rewards.staticReward, 18, 4)} SHD</p>
+            </Card>
+            <Card>
+              <p className="text-[10px] text-text-muted sm:text-xs">直推收益</p>
+              <p className="mt-1 text-sm font-semibold text-text-primary sm:text-base">{formatTokenAmount(rewards.referralReward, 18, 4)} SHD</p>
+            </Card>
+            <Card>
+              <p className="text-[10px] text-text-muted sm:text-xs">团队收益</p>
+              <p className="mt-1 text-sm font-semibold text-text-primary sm:text-base">{formatTokenAmount(rewards.teamReward, 18, 4)} SHD</p>
+            </Card>
+            <Card>
+              <p className="text-[10px] text-text-muted sm:text-xs">累计收益</p>
+              <p className="mt-1 text-sm font-semibold text-cyber-blue sm:text-base">{formatTokenAmount(rewards.totalReward, 18, 4)} SHD</p>
+            </Card>
+          </div>
+        )}
+      </section>
+
       {/* ===== 我的订单 ===== */}
       <section className="mb-6 animate-slide-up opacity-0 sm:mb-8" style={{ animationDelay: "0.29s" }}>
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
@@ -220,63 +380,14 @@ export default function DashboardPage() {
           <Card><p className="py-4 text-center text-xs text-text-muted">暂无订单记录</p></Card>
         ) : (
           <div className="space-y-3">
-            {positions.map((position) => {
-              const createdSec = position.startTime;
-              const expirySec = position.endTime;
-              const nowSec = nowMs / 1000;
-              const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
-              const expired = position.isUnstaked || nowSec >= expirySec;
-              const durationSec = Math.max(1, expirySec - createdSec);
-              const timeProgress = durationSec > 0
-                ? Math.min(100, Math.max(0, Math.round(((nowSec - createdSec) / durationSec) * 100)))
-                : 0;
-              const statusLabel = position.isUnstaked ? "已结算" : expired ? "已到期" : "锁仓中";
-              const statusColor = expired ? "bg-accent-green/20 text-accent-green" : "bg-amber-orange/20 text-amber-orange";
-              const expiryDate = expirySec > 0 ? new Date(expirySec * 1000).toLocaleDateString("zh-CN") : "—";
-              return (
-                <Card key={position.id} className="border-card-border">
-                  {/* 头部: 编号 + 状态 */}
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-text-primary">#{position.id}</span>
-                      <span className="rounded-md bg-cyber-blue/15 px-2 py-0.5 text-[10px] font-medium text-cyber-blue sm:text-xs">
-                        SHD 认购
-                      </span>
-                    </div>
-                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium sm:text-xs ${statusColor}`}>{statusLabel}</span>
-                  </div>
-                  {/* 核心数据 */}
-                  <div className="mb-3 grid grid-cols-2 gap-y-2 text-xs sm:text-sm">
-                    <div>
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">SHD 数量</p>
-                      <p className="font-semibold text-text-primary">{formatTokenAmount(position.amount, 18, 2)} SHD</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">锁仓天数</p>
-                      <p className="font-semibold text-text-primary">{position.period} 天</p>
-                    </div>
-                    <div>
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">剩余天数</p>
-                      <p className="font-semibold text-cyber-blue">{expired ? "已释放" : `${remainDays} 天`}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">到期时间</p>
-                      <p className="font-semibold text-text-primary">{expiryDate}</p>
-                    </div>
-                  </div>
-                  {/* 进度条 */}
-                  <div className="mb-3">
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
-                      <div className="h-full rounded-full bg-cyber-blue transition-[width] duration-700" style={{ width: `${timeProgress}%` }} />
-                    </div>
-                    <div className="mt-1 flex justify-between text-[10px] text-text-muted">
-                      <span>进度 {timeProgress}%</span>
-                      <span>{expired ? statusLabel : `剩余 ${remainDays} 天`}</span>
-                    </div>
-                  </div>
-                </Card>
-              );
-            })}
+            {positions.map((position) => (
+              <PositionCard
+                key={position.id}
+                position={position}
+                nowMs={nowMs}
+                onSettled={refreshDashboardData}
+              />
+            ))}
           </div>
         )}
       </section>

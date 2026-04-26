@@ -10,6 +10,7 @@ import { isAddress, parseEther } from "viem";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { DAPP_ABI, ERC20_ABI } from "@/constants/abis/generated";
 import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { appMode } from "@/config/appMode";
 import { dorNetwork } from "@/config/chains";
 import { useDappTokenAddress } from "@/hooks/dapp/useDappTokenAddress";
 import { useTokenApproval } from "@/hooks/token/useTokenApproval";
@@ -238,6 +239,12 @@ export default function AdminPage() {
             合约信息
           </div>
           <div className="space-y-3">
+            <div className="rounded-lg bg-white/[0.04] p-3 sm:p-4">
+              <p className="mb-1.5 text-[10px] text-text-muted sm:text-xs">当前 DApp 模式 / 目标链</p>
+              <p className="font-mono text-xs text-text-primary sm:text-sm">
+                {appMode} / {dorNetwork.name} / Chain ID {dorNetwork.id}
+              </p>
+            </div>
             <CopyAddressRow label="DApp 合约地址" address={DAPP_CONTRACT_ADDRESS} />
             {isShdAddressLoading ? (
               <Skeleton className="h-20 w-full" />

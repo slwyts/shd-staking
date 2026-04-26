@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Users,
   UserPlus,
@@ -8,7 +8,6 @@ import {
   Check,
   Trophy,
   TrendingUp,
-  ChevronRight,
 } from "lucide-react";
 import { useAccount } from "wagmi";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -19,17 +18,25 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Loading";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
 import { useTeamInfo } from "@/hooks/dashboard/useTeamInfo";
-import { formatLargeNumber, formatAddress } from "@/utils/format";
-import { V_LEVEL_CONFIG, type VLevel } from "@/types/team";
-
-function getNextLevel(current: VLevel) {
-  const idx = V_LEVEL_CONFIG.findIndex((v) => v.level === current);
-  return idx < V_LEVEL_CONFIG.length - 1 ? V_LEVEL_CONFIG[idx + 1] : null;
-}
+import { useDirectReferrals } from "@/hooks/dashboard/useDirectReferrals";
+import { useTeamRewards } from "@/hooks/dashboard/useTeamRewards";
+import { formatLargeNumber, formatAddress, formatTokenAmount } from "@/utils/format";
+import { V_LEVEL_CONFIG } from "@/types/team";
 
 export default function TeamPage() {
   const { isConnected, address } = useAccount();
   const { teamInfo, isLoading } = useTeamInfo();
+  const { referrals, isLoading: referralsLoading } = useDirectReferrals();
+  const {
+    grants,
+    pendingTotal,
+    isLoading: rewardsLoading,
+    isClaimPending,
+    isClaimConfirming,
+    isClaimed,
+    claimAll,
+    refetch: refetchTeamRewards,
+  } = useTeamRewards();
   const [copied, setCopied] = useState(false);
 
   const inviteLink =
@@ -48,13 +55,14 @@ export default function TeamPage() {
   const currentConfig = teamInfo
     ? V_LEVEL_CONFIG[teamInfo.vLevel] ?? V_LEVEL_CONFIG[0]
     : V_LEVEL_CONFIG[0];
-  const nextLevel = teamInfo ? getNextLevel(teamInfo.vLevel) : V_LEVEL_CONFIG[1];
 
   const minorPerf = teamInfo
     ? Number(teamInfo.minorPerformance / BigInt(10 ** 18))
     : 0;
-  const nextReq = nextLevel ? nextLevel.requiredMinorPerformance * 10000 : 0;
-  const progress = nextReq > 0 ? Math.min((minorPerf / nextReq) * 100, 100) : 0;
+
+  useEffect(() => {
+    if (isClaimed) void refetchTeamRewards();
+  }, [isClaimed, refetchTeamRewards]);
 
   return (
     <NetworkGuard>
@@ -209,32 +217,69 @@ export default function TeamPage() {
                 小区业绩: {formatLargeNumber(minorPerf)} SHD
               </span>
             </div>
+            <p className="text-[10px] text-text-muted sm:text-xs">等级由链上用户级别数据决定，后台导入后实时展示。</p>
+          </Card>
+        </AnimatedSection>
 
-            {/* 进度条 */}
-            <div className="relative mb-2 h-2 w-full overflow-hidden rounded-full bg-white/10 sm:h-2.5">
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyber-blue to-cyber-purple transition-all duration-700 ease-out"
-                style={{ width: `${progress}%` }}
-              />
-              <div
-                className="absolute inset-y-0 left-0 rounded-full bg-gradient-to-r from-cyber-blue/50 to-cyber-purple/50 blur-sm transition-all duration-700"
-                style={{ width: `${progress}%` }}
-              />
+        {/* 团队奖励 */}
+        <AnimatedSection direction="up" delay={0.3}>
+          <Card className="mb-5 sm:mb-6">
+            <div className="mb-3 flex items-center justify-between gap-3 sm:mb-4">
+              <div className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />
+                <h3 className="text-sm font-semibold text-text-primary sm:text-base">团队奖励</h3>
+              </div>
+              <Badge variant="blue">{grants.length} 笔</Badge>
             </div>
 
-            {nextLevel && (
-              <p className="text-[10px] text-text-muted sm:text-xs">
-                距离 {nextLevel.label} 级别还差:{" "}
-                <span className="font-medium text-text-secondary">
-                  {formatLargeNumber(Math.max(nextReq - minorPerf, 0))} SHD
-                </span>
-              </p>
+            {!isConnected ? (
+              <p className="text-xs text-text-muted sm:text-sm">连接钱包后查看团队奖励</p>
+            ) : rewardsLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-white/[0.04] px-3 py-2.5">
+                    <p className="text-[10px] text-text-muted sm:text-xs">待领取</p>
+                    <p className="mt-1 text-sm font-semibold text-accent-green sm:text-base">{formatTokenAmount(pendingTotal, 18, 4)} SHD</p>
+                  </div>
+                  <div className="rounded-lg bg-white/[0.04] px-3 py-2.5">
+                    <p className="text-[10px] text-text-muted sm:text-xs">累计分配</p>
+                    <p className="mt-1 text-sm font-semibold text-cyber-blue sm:text-base">{formatTokenAmount(teamInfo?.teamReward ?? BigInt(0), 18, 4)} SHD</p>
+                  </div>
+                </div>
+                <Button
+                  className="w-full"
+                  loading={isClaimPending || isClaimConfirming}
+                  disabled={pendingTotal === BigInt(0)}
+                  onClick={claimAll}
+                >
+                  {isClaimConfirming ? "领取确认中..." : pendingTotal === BigInt(0) ? "暂无可领取" : "领取团队奖励"}
+                </Button>
+                {isClaimed && <p className="text-center text-xs text-accent-green">团队奖励已领取</p>}
+                {grants.length > 0 && (
+                  <div className="max-h-56 space-y-2 overflow-y-auto pr-1">
+                    {grants.slice(0, 8).map((grant) => (
+                      <div key={grant.id} className="rounded-lg border border-card-border bg-white/[0.03] px-3 py-2 text-xs">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="font-medium text-text-primary">#{grant.id} / {grant.period} 天</span>
+                          <span className="text-text-muted">来源 {formatAddress(grant.source)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-text-muted sm:text-xs">
+                          <span>额度 {formatTokenAmount(grant.amount, 18, 4)} SHD</span>
+                          <span>已领 {formatTokenAmount(grant.claimed, 18, 4)} SHD</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </Card>
         </AnimatedSection>
 
         {/* 我的团队 - 直推列表 */}
-        <AnimatedSection direction="up" delay={0.32}>
+        <AnimatedSection direction="up" delay={0.34}>
           <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
             <Users className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />
             我的团队
@@ -247,12 +292,12 @@ export default function TeamPage() {
                 </div>
                 <p className="text-xs text-text-muted sm:text-sm">连接钱包后查看团队成员</p>
               </div>
-            ) : isLoading ? (
+            ) : isLoading || referralsLoading ? (
               <div className="space-y-3">
                 <Skeleton className="h-12 w-full sm:h-14" />
                 <Skeleton className="h-12 w-full sm:h-14" />
               </div>
-            ) : (teamInfo?.directCount ?? 0) === 0 ? (
+            ) : referrals.length === 0 ? (
               <div className="py-8 text-center sm:py-12">
                 <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-white/5 sm:h-14 sm:w-14">
                   <Users className="h-6 w-6 text-text-muted sm:h-7 sm:w-7" />
@@ -266,11 +311,17 @@ export default function TeamPage() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between border-b border-card-border pb-2 text-[10px] text-text-muted sm:text-xs">
                   <span>直推成员</span>
-                  <span>共 {teamInfo?.directCount ?? 0} 人</span>
+                  <span>共 {referrals.length} 人</span>
                 </div>
-                <p className="py-4 text-center text-[10px] text-text-muted sm:text-xs">
-                  链上成员数据通过合约查询，详情请查看区块浏览器
-                </p>
+                {referrals.map((referral, index) => (
+                  <div key={referral} className="flex items-center justify-between rounded-lg border border-card-border bg-white/[0.03] px-3 py-2.5 text-xs sm:text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium text-text-primary">直推成员 {index + 1}</p>
+                      <p className="mt-0.5 font-mono text-[10px] text-text-muted sm:text-xs">{referral}</p>
+                    </div>
+                    <Badge variant="blue">链上</Badge>
+                  </div>
+                ))}
               </div>
             )}
           </Card>

@@ -99,6 +99,8 @@ contract SHDStaking is Ownable2Step {
     mapping(address => uint8) public userLevel;
     mapping(address => bool) public isOperationCenter;
     mapping(address => uint256) public directCount;
+    mapping(address => address[]) private _directReferrals;
+    mapping(address => mapping(address => uint256)) private _directReferralIndexPlusOne;
 
     mapping(address => uint256) public totalActiveStaked;
     mapping(address => uint256) public staticRewardClaimed;
@@ -354,15 +356,20 @@ contract SHDStaking is Ownable2Step {
     }
 
     function getTeamInfo(address user) external view returns (TeamInfo memory) {
+        (uint256 totalMembers, uint256 majorPerformance, uint256 minorPerformance) = _teamStats(user);
         return TeamInfo({
             directCount: directCount[user],
-            totalMembers: directCount[user],
-            majorPerformance: totalActiveStaked[user],
-            minorPerformance: 0,
+            totalMembers: totalMembers,
+            majorPerformance: majorPerformance,
+            minorPerformance: minorPerformance,
             vLevel: userLevel[user],
             referralReward: referralRewardPaid[user],
             teamReward: teamRewardAllocated[user]
         });
+    }
+
+    function getDirectReferrals(address user) external view returns (address[] memory) {
+        return _directReferrals[user];
     }
 
     function getRewardSummary(address user) external view returns (RewardSummary memory summary) {
@@ -431,13 +438,65 @@ contract SHDStaking is Ownable2Step {
 
         if (oldReferrer != address(0)) {
             directCount[oldReferrer] -= 1;
+            _removeDirectReferral(oldReferrer, user);
         }
         if (referrer != address(0)) {
             directCount[referrer] += 1;
+            _addDirectReferral(referrer, user);
         }
 
         referrerOf[user] = referrer;
         emit ReferrerUpdated(user, oldReferrer, referrer);
+    }
+
+    function _addDirectReferral(address referrer, address user) private {
+        if (_directReferralIndexPlusOne[referrer][user] != 0) return;
+        _directReferrals[referrer].push(user);
+        _directReferralIndexPlusOne[referrer][user] = _directReferrals[referrer].length;
+    }
+
+    function _removeDirectReferral(address referrer, address user) private {
+        uint256 indexPlusOne = _directReferralIndexPlusOne[referrer][user];
+        if (indexPlusOne == 0) return;
+
+        uint256 index = indexPlusOne - 1;
+        uint256 lastIndex = _directReferrals[referrer].length - 1;
+        if (index != lastIndex) {
+            address lastUser = _directReferrals[referrer][lastIndex];
+            _directReferrals[referrer][index] = lastUser;
+            _directReferralIndexPlusOne[referrer][lastUser] = indexPlusOne;
+        }
+
+        _directReferrals[referrer].pop();
+        delete _directReferralIndexPlusOne[referrer][user];
+    }
+
+    function _teamStats(address user) private view returns (uint256 totalMembers, uint256 majorPerformance, uint256 minorPerformance) {
+        address[] storage referrals = _directReferrals[user];
+        uint256 totalPerformance;
+
+        for (uint256 i; i < referrals.length; ++i) {
+            (uint256 branchMembers, uint256 branchPerformance) = _subtreeStats(referrals[i], 1);
+            totalMembers += branchMembers;
+            totalPerformance += branchPerformance;
+            if (branchPerformance > majorPerformance) majorPerformance = branchPerformance;
+        }
+
+        minorPerformance = totalPerformance - majorPerformance;
+    }
+
+    function _subtreeStats(address user, uint256 depth) private view returns (uint256 members, uint256 performance) {
+        members = 1;
+        performance = totalActiveStaked[user];
+
+        if (depth >= MAX_UPLINE_DEPTH) return (members, performance);
+
+        address[] storage referrals = _directReferrals[user];
+        for (uint256 i; i < referrals.length; ++i) {
+            (uint256 childMembers, uint256 childPerformance) = _subtreeStats(referrals[i], depth + 1);
+            members += childMembers;
+            performance += childPerformance;
+        }
     }
 
     function _setUserLevel(address user, uint8 level) private {

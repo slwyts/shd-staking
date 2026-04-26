@@ -93,7 +93,9 @@ async function main() {
   const chainId = Number.parseInt(chainIdHex, 16);
   const { dappAddress, shdTokenAddress } = await deployLocalDapp({ rootDir, rpcUrl, chainId });
 
+  updateEnvValue(developmentEnvPath, "NEXT_PUBLIC_APP_MODE", "development");
   updateEnvValue(developmentEnvPath, "NEXT_PUBLIC_DAPP_ADDRESS", dappAddress);
+  console.log("Updated .env.development NEXT_PUBLIC_APP_MODE=development");
   console.log(`Updated .env.development NEXT_PUBLIC_DAPP_ADDRESS=${dappAddress}`);
   console.log(`Local SHD token: ${shdTokenAddress}`);
 

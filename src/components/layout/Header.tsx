@@ -2,20 +2,21 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
-import { Languages, Wallet, LogOut } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { Wallet, LogOut } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
-import { useLocale } from "@/providers/LocaleProvider";
+import { dorNetwork } from "@/config/chains";
 import { formatAddress } from "@/utils/format";
+
+const subscribeHydration = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
 
 function WalletButton() {
   const { isConnected, address } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
-
-  // 延迟到客户端渲染已连接状态，避免 SSR 水合不匹配
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useSyncExternalStore(subscribeHydration, getClientSnapshot, getServerSnapshot);
 
   if (mounted && isConnected && address) {
     return (
@@ -43,7 +44,7 @@ function WalletButton() {
     <button
       type="button"
       disabled={isConnecting || !injected}
-      onClick={() => injected && connect({ connector: injected })}
+      onClick={() => injected && connect({ connector: injected, chainId: dorNetwork.id })}
       className="flex items-center gap-1 rounded-lg border border-transparent bg-white/5 px-2 py-1.5 transition-all duration-200 hover:border-amber-orange/30 hover:bg-amber-orange/5 active:scale-95 disabled:opacity-50 sm:gap-1.5 sm:px-3"
     >
       <Wallet className="h-3 w-3 text-amber-orange sm:h-3.5 sm:w-3.5" />
@@ -55,8 +56,6 @@ function WalletButton() {
 }
 
 export function Header() {
-  const { locale, toggleLocale } = useLocale();
-
   return (
     <header className="sticky top-0 z-50 flex items-center justify-between border-b border-card-border bg-deep-space/80 px-3 py-2.5 backdrop-blur-md transition-all duration-300 animate-slide-down sm:px-5 sm:py-3">
       <Link href="/" className="group flex items-center gap-1.5 sm:gap-2">
@@ -67,15 +66,6 @@ export function Header() {
       </Link>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
-        <button
-          type="button"
-          onClick={toggleLocale}
-          className="flex items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] text-text-secondary transition-all duration-200 hover:bg-white/5 hover:text-text-primary active:scale-95 sm:gap-1 sm:px-2.5 sm:text-xs"
-        >
-          <Languages className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-          {locale === "zh" ? "EN" : "中文"}
-        </button>
-
         <WalletButton />
       </div>
     </header>

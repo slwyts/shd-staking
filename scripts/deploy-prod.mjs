@@ -80,7 +80,9 @@ async function main() {
     initialOwner: env.INITIAL_OWNER_ADDRESS || undefined,
   });
 
+  updateEnvValue(productionEnvPath, "NEXT_PUBLIC_APP_MODE", "production");
   updateEnvValue(productionEnvPath, "NEXT_PUBLIC_DAPP_ADDRESS", dappAddress);
+  console.log("Updated .env.production NEXT_PUBLIC_APP_MODE=production");
   console.log(`Updated .env.production NEXT_PUBLIC_DAPP_ADDRESS=${dappAddress}`);
 }
 

@@ -5,7 +5,7 @@
  */
 import { createConfig, http } from "wagmi";
 import { injected } from "wagmi/connectors";
-import { dorNetwork } from "./chains";
+import { developmentDorNetwork, dorNetwork, productionDorNetwork } from "./chains";
 
 /** Wagmi 全局配置实例 */
 export const wagmiConfig = createConfig({
@@ -14,6 +14,7 @@ export const wagmiConfig = createConfig({
     injected(),
   ],
   transports: {
-    [dorNetwork.id]: http(),
+    [developmentDorNetwork.id]: http(),
+    [productionDorNetwork.id]: http(),
   },
 });
