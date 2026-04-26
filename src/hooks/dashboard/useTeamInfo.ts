@@ -35,6 +35,7 @@ export function useTeamInfo() {
         majorPerformance: (rawTeam as { majorPerformance: bigint }).majorPerformance,
         minorPerformance: (rawTeam as { minorPerformance: bigint }).minorPerformance,
         vLevel: Number((rawTeam as { vLevel: bigint }).vLevel) as VLevel,
+        operationCenter: (rawTeam as { operationCenter: boolean }).operationCenter,
         referralReward: (rawTeam as { referralReward: bigint }).referralReward,
         teamReward: (rawTeam as { teamReward: bigint }).teamReward,
       }

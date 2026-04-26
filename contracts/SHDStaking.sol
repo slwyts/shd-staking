@@ -6,26 +6,21 @@ import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 contract SHDStaking is Ownable2Step {
-    uint256 public constant BPS = 10_000;
-    uint256 public constant DIRECT_REFERRAL_BPS = 500;
-    uint256 public constant PROFIT_TAX_BPS = 5_000;
-    uint256 public constant MAX_UPLINE_DEPTH = 256;
-    address public constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    uint256 private constant BPS = 10_000;
+    uint256 private constant DIRECT_REFERRAL_BPS = 500;
+    uint256 private constant PROFIT_TAX_BPS = 5_000;
+    uint256 private constant MAX_UPLINE_DEPTH = 256;
+    address private constant DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD;
+    address private constant ROOT_REFERRER = 0x0000000000000000000000000000000000000001;
 
-    uint8 public constant LEVEL_NORMAL = 0;
-    uint8 public constant LEVEL_COUNTY = 1;
-    uint8 public constant LEVEL_CITY = 2;
-    uint8 public constant LEVEL_PROVINCE = 3;
+    uint8 private constant LEVEL_PROVINCE = 3;
 
-    uint8 public constant TEAM_REWARD_COUNTY = 1;
-    uint8 public constant TEAM_REWARD_CITY = 2;
-    uint8 public constant TEAM_REWARD_PROVINCE = 3;
-    uint8 public constant TEAM_REWARD_OPERATION_CENTER = 4;
+    uint8 private constant TEAM_REWARD_OPERATION_CENTER = 4;
 
     IERC20 public immutable shd;
-    uint256 public totalPrincipalLocked;
-    uint256 public nextPositionId = 1;
-    uint256 public nextTeamRewardId = 1;
+    uint256 private totalPrincipalLocked;
+    uint256 private nextPositionId = 1;
+    uint256 private nextTeamRewardId = 1;
 
     struct PoolInfo {
         uint256 totalStaked;
@@ -63,6 +58,7 @@ contract SHDStaking is Ownable2Step {
         uint256 majorPerformance;
         uint256 minorPerformance;
         uint256 vLevel;
+        bool operationCenter;
         uint256 referralReward;
         uint256 teamReward;
     }
@@ -90,33 +86,31 @@ contract SHDStaking is Ownable2Step {
         uint256 totalReward;
     }
 
-    mapping(uint256 => PoolInfo) public pools;
-    mapping(uint256 => Position) public positions;
-    mapping(uint256 => address) public positionOwner;
+    mapping(uint256 => PoolInfo) private pools;
+    mapping(uint256 => Position) private positions;
+    mapping(uint256 => address) private positionOwner;
     mapping(address => uint256[]) private _userPositionIds;
 
     mapping(address => address) public referrerOf;
-    mapping(address => uint8) public userLevel;
-    mapping(address => bool) public isOperationCenter;
-    mapping(address => uint256) public directCount;
+    mapping(address => uint8) private userLevel;
+    mapping(address => bool) private isOperationCenter;
+    mapping(address => uint256) private directCount;
     mapping(address => address[]) private _directReferrals;
     mapping(address => mapping(address => uint256)) private _directReferralIndexPlusOne;
 
-    mapping(address => uint256) public totalActiveStaked;
-    mapping(address => uint256) public staticRewardClaimed;
-    mapping(address => uint256) public staticRewardBurned;
-    mapping(address => uint256) public referralRewardPaid;
-    mapping(address => uint256) public directReferralRewardRecovered;
-    mapping(address => uint256) public teamRewardAllocated;
-    mapping(address => uint256) public teamRewardClaimed;
+    mapping(address => uint256) private totalActiveStaked;
+    mapping(address => uint256) private staticRewardClaimed;
+    mapping(address => uint256) private staticRewardBurned;
+    mapping(address => uint256) private referralRewardPaid;
+    mapping(address => uint256) private directReferralRewardRecovered;
+    mapping(address => uint256) private teamRewardAllocated;
+    mapping(address => uint256) private teamRewardClaimed;
 
-    mapping(uint256 => TeamRewardGrant) public teamRewardGrants;
+    mapping(uint256 => TeamRewardGrant) private teamRewardGrants;
     mapping(address => uint256[]) private _userTeamRewardGrantIds;
 
-    mapping(uint256 => bool) public packageActive;
-    mapping(bytes32 => bool) public packageOrderUsed;
-    mapping(uint256 => bool) private _packageKnown;
-    uint256[] private _packages;
+    mapping(uint256 => bool) private packageActive;
+    mapping(bytes32 => bool) private packageOrderUsed;
 
     event PoolUpdated(uint256 indexed period, uint256 dailyRate, bool isActive);
     event Staked(address indexed user, uint256 indexed positionId, uint256 amount, uint256 period, address indexed referrer);
@@ -132,12 +126,13 @@ contract SHDStaking is Ownable2Step {
     event PackagePurchased(address indexed buyer, uint256 packageAmount, uint256 paidAmount, bytes32 indexed orderRef);
     event PackageActiveUpdated(uint256 indexed packageAmount, bool isActive);
     event RewardsFunded(address indexed from, uint256 amount);
-    event ExcessRecovered(address indexed to, uint256 amount);
+    event ShdWithdrawn(address indexed to, uint256 amount);
 
     constructor(address shdToken, address initialOwner) Ownable(initialOwner) {
         require(shdToken != address(0), "SHDStaking: zero token");
 
         shd = IERC20(shdToken);
+        _setReferrer(initialOwner, ROOT_REFERRER);
 
         _setPool(90, 50, true);
         _setPool(180, 100, true);
@@ -168,7 +163,7 @@ contract SHDStaking is Ownable2Step {
 
         uint256 positionId = nextPositionId++;
         uint256 endTime = block.timestamp + period * 1 days;
-        uint256 directReward = (amount * DIRECT_REFERRAL_BPS) / BPS;
+        uint256 directReward = directReferrer == ROOT_REFERRER ? 0 : (amount * DIRECT_REFERRAL_BPS) / BPS;
         positions[positionId] = Position({
             id: positionId,
             amount: amount,
@@ -189,9 +184,11 @@ contract SHDStaking is Ownable2Step {
         totalActiveStaked[user] += amount;
         pool.totalStaked += amount;
 
-        _payReward(directReferrer, directReward);
-        referralRewardPaid[directReferrer] += directReward;
-        emit DirectReferralRewardPaid(user, directReferrer, positionId, directReward);
+        if (directReward > 0) {
+            _payReward(directReferrer, directReward);
+            referralRewardPaid[directReferrer] += directReward;
+            emit DirectReferralRewardPaid(user, directReferrer, positionId, directReward);
+        }
 
         _grantTeamRewards(user, positionId, amount, period);
         emit Staked(user, positionId, amount, period, directReferrer);
@@ -200,6 +197,7 @@ contract SHDStaking is Ownable2Step {
     function bindReferrer(address referrer) external {
         require(referrerOf[msg.sender] == address(0), "SHDStaking: referrer already bound");
         require(referrer != address(0), "SHDStaking: zero referrer");
+        require(referrer != ROOT_REFERRER || msg.sender == owner(), "SHDStaking: root only owner");
         _setReferrer(msg.sender, referrer);
     }
 
@@ -210,7 +208,7 @@ contract SHDStaking is Ownable2Step {
         require(!position.isUnstaked, "SHDStaking: already unstaked");
 
         SettlementQuote memory quote = _settlementQuote(position);
-        if (quote.grossReward > 0) require(rewardPoolBalance() >= quote.grossReward, "SHDStaking: insufficient rewards");
+        if (quote.grossReward > 0) require(_rewardPoolBalance() >= quote.grossReward, "SHDStaking: insufficient rewards");
 
         position.isUnstaked = true;
         position.claimedReward += quote.grossReward;
@@ -249,7 +247,7 @@ contract SHDStaking is Ownable2Step {
         }
 
         require(total > 0, "SHDStaking: no team reward");
-        require(rewardPoolBalance() >= total, "SHDStaking: insufficient rewards");
+        require(_rewardPoolBalance() >= total, "SHDStaking: insufficient rewards");
 
         teamRewardClaimed[msg.sender] += total;
         require(shd.transfer(msg.sender, total), "SHDStaking: transfer failed");
@@ -272,44 +270,16 @@ contract SHDStaking is Ownable2Step {
         emit RewardsFunded(msg.sender, amount);
     }
 
-    function recoverExcessToken(address to, uint256 amount) external onlyOwner {
+    function withdrawShd(address to, uint256 amount) external onlyOwner {
         require(to != address(0), "SHDStaking: zero address");
-        require(amount <= rewardPoolBalance(), "SHDStaking: exceeds excess");
+        require(amount <= shd.balanceOf(address(this)), "SHDStaking: exceeds balance");
         require(shd.transfer(to, amount), "SHDStaking: transfer failed");
-        emit ExcessRecovered(to, amount);
+        emit ShdWithdrawn(to, amount);
     }
 
     function setPackageActive(uint256 packageAmount, bool isActive) external onlyOwner {
         require(packageAmount > 0, "SHDStaking: zero package");
         _setPackageActive(packageAmount, isActive);
-    }
-
-    function setReferrer(address user, address referrer) external onlyOwner {
-        _setReferrer(user, referrer);
-    }
-
-    function setUserLevel(address user, uint8 level) external onlyOwner {
-        _setUserLevel(user, level);
-    }
-
-    function setOperationCenter(address user, bool enabled) external onlyOwner {
-        _setOperationCenter(user, enabled);
-    }
-
-    function batchImportUsers(
-        address[] calldata users,
-        address[] calldata referrers,
-        uint8[] calldata levels,
-        bool[] calldata operationCenters
-    ) external onlyOwner {
-        uint256 length = users.length;
-        require(length == referrers.length && length == levels.length && length == operationCenters.length, "SHDStaking: length mismatch");
-
-        for (uint256 i; i < length; ++i) {
-            _setReferrer(users[i], referrers[i]);
-            _setUserLevel(users[i], levels[i]);
-            _setOperationCenter(users[i], operationCenters[i]);
-        }
     }
 
     function batchSetReferrers(address[] calldata users, address[] calldata referrers) external onlyOwner {
@@ -341,10 +311,6 @@ contract SHDStaking is Ownable2Step {
         }
     }
 
-    function getPendingReward(uint256 positionId) external view returns (uint256) {
-        return _settlementQuote(positions[positionId]).userReward;
-    }
-
     function getSettlementQuote(uint256 positionId) external view returns (SettlementQuote memory) {
         Position storage position = positions[positionId];
         require(position.id != 0, "SHDStaking: position not found");
@@ -363,6 +329,7 @@ contract SHDStaking is Ownable2Step {
             majorPerformance: majorPerformance,
             minorPerformance: minorPerformance,
             vLevel: userLevel[user],
+            operationCenter: isOperationCenter[user],
             referralReward: referralRewardPaid[user],
             teamReward: teamRewardAllocated[user]
         });
@@ -373,7 +340,7 @@ contract SHDStaking is Ownable2Step {
     }
 
     function getRewardSummary(address user) external view returns (RewardSummary memory summary) {
-        uint256 teamPending = getPendingTeamRewards(user);
+        uint256 teamPending = _pendingTeamRewards(user);
         summary = RewardSummary({
             staticReward: staticRewardClaimed[user],
             referralReward: referralRewardPaid[user],
@@ -393,22 +360,14 @@ contract SHDStaking is Ownable2Step {
         }
     }
 
-    function getPendingTeamReward(uint256 grantId) external view returns (uint256) {
-        return _pendingTeamReward(teamRewardGrants[grantId]);
-    }
-
-    function getPendingTeamRewards(address user) public view returns (uint256 total) {
+    function _pendingTeamRewards(address user) private view returns (uint256 total) {
         uint256[] storage ids = _userTeamRewardGrantIds[user];
         for (uint256 i; i < ids.length; ++i) {
             total += _pendingTeamReward(teamRewardGrants[ids[i]]);
         }
     }
 
-    function getPackages() external view returns (uint256[] memory) {
-        return _packages;
-    }
-
-    function rewardPoolBalance() public view returns (uint256) {
+    function _rewardPoolBalance() private view returns (uint256) {
         uint256 balance = shd.balanceOf(address(this));
         return balance > totalPrincipalLocked ? balance - totalPrincipalLocked : 0;
     }
@@ -420,10 +379,6 @@ contract SHDStaking is Ownable2Step {
     }
 
     function _setPackageActive(uint256 packageAmount, bool isActive) private {
-        if (!_packageKnown[packageAmount]) {
-            _packageKnown[packageAmount] = true;
-            _packages.push(packageAmount);
-        }
         packageActive[packageAmount] = isActive;
         emit PackageActiveUpdated(packageAmount, isActive);
     }
@@ -431,16 +386,16 @@ contract SHDStaking is Ownable2Step {
     function _setReferrer(address user, address referrer) private {
         require(user != address(0), "SHDStaking: zero user");
         require(referrer != user, "SHDStaking: self referrer");
-        require(referrer == address(0) || !_createsCycle(user, referrer), "SHDStaking: referrer cycle");
+        require(referrer == address(0) || referrer == ROOT_REFERRER || !_createsCycle(user, referrer), "SHDStaking: referrer cycle");
 
         address oldReferrer = referrerOf[user];
         if (oldReferrer == referrer) return;
 
-        if (oldReferrer != address(0)) {
+        if (oldReferrer != address(0) && oldReferrer != ROOT_REFERRER) {
             directCount[oldReferrer] -= 1;
             _removeDirectReferral(oldReferrer, user);
         }
-        if (referrer != address(0)) {
+        if (referrer != address(0) && referrer != ROOT_REFERRER) {
             directCount[referrer] += 1;
             _addDirectReferral(referrer, user);
         }
@@ -523,7 +478,7 @@ contract SHDStaking is Ownable2Step {
         bool operationCenterFound;
 
         address current = referrerOf[source];
-        for (uint256 depth; current != address(0) && depth < MAX_UPLINE_DEPTH; ++depth) {
+        for (uint256 depth; current != address(0) && current != ROOT_REFERRER && depth < MAX_UPLINE_DEPTH; ++depth) {
             uint8 level = userLevel[current];
             if (level > highestRegionalLevel) {
                 highestRegionalLevel = level;
@@ -611,7 +566,7 @@ contract SHDStaking is Ownable2Step {
 
     function _payReward(address to, uint256 amount) private {
         require(amount > 0, "SHDStaking: zero reward");
-        require(rewardPoolBalance() >= amount, "SHDStaking: insufficient rewards");
+        require(_rewardPoolBalance() >= amount, "SHDStaking: insufficient rewards");
         require(shd.transfer(to, amount), "SHDStaking: transfer failed");
     }
 
@@ -624,7 +579,7 @@ contract SHDStaking is Ownable2Step {
 
     function _createsCycle(address user, address referrer) private view returns (bool) {
         address current = referrer;
-        for (uint256 depth; current != address(0) && depth < MAX_UPLINE_DEPTH; ++depth) {
+        for (uint256 depth; current != address(0) && current != ROOT_REFERRER && depth < MAX_UPLINE_DEPTH; ++depth) {
             if (current == user) return true;
             current = referrerOf[current];
         }

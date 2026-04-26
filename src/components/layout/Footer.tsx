@@ -1,12 +1,18 @@
+"use client";
+
 import { Search, Globe, Download, ExternalLink } from "lucide-react";
 import { siteConfig } from "@/config/site";
+import { useChainTime } from "@/hooks/common/useChainTime";
 
 export function Footer() {
+  const { nowSec } = useChainTime();
+  const chainYear = nowSec === undefined ? undefined : new Date(nowSec * 1000).getUTCFullYear();
+
   return (
     <footer className="border-t border-card-border py-3 px-4">
       <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 sm:flex-row sm:justify-between">
         <p className="text-[11px] text-text-muted">
-          &copy; {new Date().getFullYear()} {siteConfig.name}
+          &copy; {chainYear ? `${chainYear} ` : ""}{siteConfig.name}
         </p>
         <div className="flex items-center gap-4">
           <a href={siteConfig.links.explorer} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text-secondary">

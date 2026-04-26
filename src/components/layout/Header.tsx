@@ -2,28 +2,26 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useSyncExternalStore } from "react";
 import { Wallet, LogOut } from "lucide-react";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { dorNetwork } from "@/config/chains";
+import { useHydrated } from "@/hooks/common/useHydrated";
 import { formatAddress } from "@/utils/format";
 
-const subscribeHydration = () => () => {};
-const getClientSnapshot = () => true;
-const getServerSnapshot = () => false;
-
 function WalletButton() {
+  const hydrated = useHydrated();
   const { isConnected, address } = useAccount();
   const { connect, connectors, isPending: isConnecting } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
-  const mounted = useSyncExternalStore(subscribeHydration, getClientSnapshot, getServerSnapshot);
+  const walletAddress = hydrated ? address : undefined;
+  const injected = hydrated ? connectors.find((c) => c.id === "injected") ?? connectors[0] : undefined;
 
-  if (mounted && isConnected && address) {
+  if (hydrated && isConnected && walletAddress) {
     return (
       <div className="flex items-center gap-1 sm:gap-1.5">
         <div className="flex items-center gap-1 rounded-lg border border-accent-green/30 bg-accent-green/5 px-2 py-1.5 sm:gap-1.5 sm:px-3">
           <Wallet className="h-3 w-3 text-accent-green sm:h-3.5 sm:w-3.5" />
-          <span className="font-mono text-[10px] text-accent-green sm:text-xs">{formatAddress(address)}</span>
+          <span className="font-mono text-[10px] text-accent-green sm:text-xs">{formatAddress(walletAddress)}</span>
         </div>
         <button
           type="button"
@@ -38,12 +36,10 @@ function WalletButton() {
     );
   }
 
-  const injected = connectors.find((c) => c.id === "injected") ?? connectors[0];
-
   return (
     <button
       type="button"
-      disabled={isConnecting || !injected}
+      disabled={!hydrated || isConnecting || !injected}
       onClick={() => injected && connect({ connector: injected, chainId: dorNetwork.id })}
       className="flex items-center gap-1 rounded-lg border border-transparent bg-white/5 px-2 py-1.5 transition-all duration-200 hover:border-amber-orange/30 hover:bg-amber-orange/5 active:scale-95 disabled:opacity-50 sm:gap-1.5 sm:px-3"
     >

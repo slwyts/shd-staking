@@ -8,6 +8,7 @@ import { useMemo } from "react";
 import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { DAPP_ABI } from "@/constants/abis/generated";
 import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { useChainTime } from "@/hooks/common/useChainTime";
 import type { TeamRewardGrant, StakingPeriod, TeamRewardType } from "@/types/staking";
 
 function pendingOfGrant(grant: TeamRewardGrant, nowSec: number) {
@@ -22,7 +23,7 @@ function pendingOfGrant(grant: TeamRewardGrant, nowSec: number) {
 
 export function useTeamRewards() {
   const { address } = useAccount();
-  const nowSec = Math.floor(Date.now() / 1000);
+  const { nowSec = 0 } = useChainTime();
 
   const { data, isLoading, refetch } = useReadContract({
     address: DAPP_CONTRACT_ADDRESS,

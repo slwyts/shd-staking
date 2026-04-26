@@ -6,7 +6,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useState, useMemo, useCallback } from "react";
+import { Suspense, useState, useMemo, useCallback, useEffect } from "react";
 import { useReadContract } from "wagmi";
 import { parseUnits } from "viem";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -24,6 +24,7 @@ import { useTokenApproval } from "@/hooks/token/useTokenApproval";
 import { DAPP_ABI } from "@/constants/abis/generated";
 import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { useStakingPools } from "@/hooks/staking/useStakingPools";
+import { useHydrated } from "@/hooks/common/useHydrated";
 import { formatAddress, formatTokenAmount } from "@/utils/format";
 import type { StakingPeriod } from "@/types/staking";
 
@@ -37,17 +38,20 @@ const PERIOD_TABS = [
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
 function StakingPageInner() {
+  const hydrated = useHydrated();
   const { address, isConnected, connectWallet } = useWallet();
+  const walletAddress = hydrated ? address : undefined;
+  const walletConnected = hydrated && isConnected && !!walletAddress;
   const { shdTokenAddress } = useDappTokenAddress();
   const { stake, isSending, isConfirming, isConfirmed } = useStake();
-  const { getPool, isLoading: poolsLoading } = useStakingPools();
+  const { getPool } = useStakingPools();
   const { balance: shdBalance } = useTokenBalance(shdTokenAddress);
   const { data: boundReferrer, isLoading: isReferrerLoading } = useReadContract({
     address: DAPP_CONTRACT_ADDRESS,
     abi: DAPP_ABI,
     functionName: "referrerOf",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    args: walletAddress ? [walletAddress] : undefined,
+    query: { enabled: !!walletAddress },
   });
   const {
     approve,
@@ -55,11 +59,14 @@ function StakingPageInner() {
     isApproving,
     isConfirming: isApproveConfirming,
     isConfirmed: isApproveConfirmed,
+    refetchAllowance,
   } = useTokenApproval(shdTokenAddress, DAPP_CONTRACT_ADDRESS);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>("90");
   const [amount, setAmount] = useState("");
   const [stakeMsg, setStakeMsg] = useState<string | null>(null);
+  const [pendingStake, setPendingStake] = useState<{ amount: bigint; period: StakingPeriod } | null>(null);
+  const [approvedStakeAmount, setApprovedStakeAmount] = useState(BigInt(0));
 
   const boundReferrerAddress = boundReferrer as `0x${string}` | undefined;
   const hasBoundReferrer = !!boundReferrerAddress && boundReferrerAddress !== ZERO_ADDRESS;
@@ -84,12 +91,30 @@ function StakingPageInner() {
 
   const handleApprove = () => {
     if (!amount) return;
+    if (!hasBoundReferrer) {
+      setStakeMsg("请先在个人中心绑定上级");
+      return;
+    }
+    if (!poolActive) {
+      setStakeMsg("当前认购周期未开放");
+      return;
+    }
     if (!shdTokenAddress) {
       setStakeMsg("正在读取 SHD 合约地址，请稍后再试");
       return;
     }
+    setPendingStake({ amount: parseUnits(amount, 18), period: periodDays });
     approve(amount, 18);
   };
+
+  useEffect(() => {
+    if (!isApproveConfirmed || !pendingStake) return;
+    void refetchAllowance();
+    setApprovedStakeAmount(pendingStake.amount);
+    setStakeMsg("授权成功，正在发起认购…");
+    stake(pendingStake);
+    setPendingStake(null);
+  }, [isApproveConfirmed, pendingStake, refetchAllowance, stake]);
 
   const handleStake = () => {
     if (!amount || numericAmount <= 0) return;
@@ -114,7 +139,7 @@ function StakingPageInner() {
   };
 
   const parsedAmount = numericAmount > 0 ? parseUnits(amount, 18) : BigInt(0);
-  const showApproveStep = numericAmount > 0 && needsApproval(parsedAmount) && !isApproveConfirmed;
+  const showApproveStep = numericAmount > 0 && needsApproval(parsedAmount) && approvedStakeAmount < parsedAmount;
 
   return (
     <NetworkGuard>
@@ -141,12 +166,6 @@ function StakingPageInner() {
                 />
                 <div className="mt-3 flex flex-wrap gap-2 sm:mt-4">
                   <Badge variant={poolActive ? "blue" : "gray"} pulse={poolActive}>日补贴 {dailyRate}%</Badge>
-                  <Badge variant={poolActive ? "green" : "orange"}>{poolActive ? "链上开放" : "链上暂停"}</Badge>
-                  {poolsLoading ? (
-                    <Badge variant="gray">读取池子中</Badge>
-                  ) : (
-                    <Badge variant="gray">池内 {formatTokenAmount(selectedPool?.totalStaked ?? BigInt(0), 18, 2)} SHD</Badge>
-                  )}
                 </div>
               </Card>
             </div>
@@ -175,7 +194,7 @@ function StakingPageInner() {
                     </div>
                   }
                 />
-                {shdBalance !== undefined && (
+                {walletConnected && shdBalance !== undefined && (
                   <p className="mt-2 text-[10px] text-text-muted sm:text-xs">
                     可用余额: {formatTokenAmount(shdBalance)} SHD
                   </p>
@@ -189,7 +208,7 @@ function StakingPageInner() {
                 <h3 className="mb-3 text-xs font-medium text-text-secondary sm:mb-4 sm:text-sm">
                   推荐关系
                 </h3>
-                {!isConnected ? (
+                {!walletConnected ? (
                   <p className="text-xs text-text-muted sm:text-sm">连接钱包后检查链上绑定状态</p>
                 ) : isReferrerLoading ? (
                   <p className="text-xs text-text-muted sm:text-sm">正在检查绑定状态…</p>
@@ -216,7 +235,7 @@ function StakingPageInner() {
 
             {/* 操作按钮 */}
             <div className="flex gap-3 animate-slide-up opacity-0 sm:gap-4" style={{ animationDelay: "0.32s" }}>
-              {!isConnected ? (
+              {!walletConnected ? (
                 <Button onClick={connectWallet} className="flex-1">
                   连接钱包
                 </Button>
@@ -224,9 +243,10 @@ function StakingPageInner() {
                 <Button
                   onClick={handleApprove}
                   loading={isApproving || isApproveConfirming}
+                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer || !poolActive}
                   className="flex-1"
                 >
-                  {isApproveConfirming ? "授权确认中..." : "授权 SHD"}
+                  {isApproveConfirming ? "授权确认中..." : "授权并认购"}
                 </Button>
               ) : (
                 <Button
@@ -270,12 +290,6 @@ function StakingPageInner() {
                     <span className="text-xs text-text-muted sm:text-sm">日补贴</span>
                     <span className="text-xs font-medium text-cyber-blue sm:text-sm">
                       {dailyRate}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-xs text-text-muted sm:text-sm">池状态</span>
-                    <span className={`text-xs font-medium sm:text-sm ${poolActive ? "text-accent-green" : "text-amber-orange"}`}>
-                      {poolActive ? "开放" : "暂停"}
                     </span>
                   </div>
                   <hr className="border-card-border" />

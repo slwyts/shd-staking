@@ -1,10 +1,12 @@
 import { spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isAddress } from "viem";
 import { deployLocalDapp } from "./lib/deploy.mjs";
 import { readEnvFile, updateEnvValue } from "./lib/env.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const hardhatEnvPath = resolve(rootDir, ".env.hardhat");
 const developmentEnvPath = resolve(rootDir, ".env.development");
 const rpcUrl = "http://127.0.0.1:8545";
 
@@ -77,6 +79,12 @@ function startNextDev() {
 }
 
 async function main() {
+  const hardhatEnv = readEnvFile(hardhatEnvPath);
+  const initialOwner = hardhatEnv.INITIAL_OWNER_ADDRESS || undefined;
+  if (initialOwner && !isAddress(initialOwner)) {
+    throw new Error("INITIAL_OWNER_ADDRESS must be a valid address when set");
+  }
+
   console.log("Compiling contracts and syncing ABI...");
   await run("pnpm", ["compile"]);
 
@@ -91,13 +99,14 @@ async function main() {
 
   const chainIdHex = await rpc("eth_chainId");
   const chainId = Number.parseInt(chainIdHex, 16);
-  const { dappAddress, shdTokenAddress } = await deployLocalDapp({ rootDir, rpcUrl, chainId });
+  const { dappAddress, shdTokenAddress, owner } = await deployLocalDapp({ rootDir, rpcUrl, chainId, initialOwner });
 
   updateEnvValue(developmentEnvPath, "NEXT_PUBLIC_APP_MODE", "development");
   updateEnvValue(developmentEnvPath, "NEXT_PUBLIC_DAPP_ADDRESS", dappAddress);
   console.log("Updated .env.development NEXT_PUBLIC_APP_MODE=development");
   console.log(`Updated .env.development NEXT_PUBLIC_DAPP_ADDRESS=${dappAddress}`);
   console.log(`Local SHD token: ${shdTokenAddress}`);
+  console.log(`Local SHDStaking owner: ${owner}`);
 
   console.log("Starting Next.js dev server...");
   const nextDev = startNextDev();

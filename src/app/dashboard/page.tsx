@@ -33,6 +33,8 @@ import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Loading";
 import { useMyPositions } from "@/hooks/dashboard/useMyPositions";
 import { useMyRewards } from "@/hooks/dashboard/useMyRewards";
+import { useChainTime } from "@/hooks/common/useChainTime";
+import { useHydrated } from "@/hooks/common/useHydrated";
 import { useStakingRewards } from "@/hooks/staking/useStakingRewards";
 import { formatAddress, formatTokenAmount } from "@/utils/format";
 import { dorNetwork } from "@/config/chains";
@@ -40,25 +42,15 @@ import { siteConfig } from "@/config/site";
 import type { StakingPosition } from "@/types/staking";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
-
-function getInitialReferrerInput() {
-  if (typeof window === "undefined") return "";
-  try {
-    const urlRef = new URLSearchParams(window.location.search).get("ref");
-    if (urlRef && isAddress(urlRef)) return urlRef;
-    return "";
-  } catch {
-    return "";
-  }
-}
+const ROOT_REFERRER = "0x0000000000000000000000000000000000000001" as `0x${string}`;
 
 function PositionCard({
   position,
-  nowMs,
+  nowSec,
   onSettled,
 }: {
   position: StakingPosition;
-  nowMs: number;
+  nowSec: number;
   onSettled: () => void;
 }) {
   const {
@@ -80,7 +72,6 @@ function PositionCard({
 
   const createdSec = position.startTime;
   const expirySec = position.endTime;
-  const nowSec = nowMs / 1000;
   const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
   const expired = position.isUnstaked || nowSec >= expirySec;
   const durationSec = Math.max(1, expirySec - createdSec);
@@ -173,11 +164,17 @@ function PositionCard({
 }
 
 export default function DashboardPage() {
+  const hydrated = useHydrated();
   const { isConnected, address, chainId, connector: activeConnector } = useAccount();
   const { connect, connectors, isPending, variables } = useConnect();
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
-  const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
+  const walletAddress = hydrated ? address : undefined;
+  const walletConnected = hydrated && isConnected && !!walletAddress;
+  const walletChainId = hydrated ? chainId : undefined;
+  const wrongChain = walletConnected && walletChainId != null && walletChainId !== dorNetwork.id;
+  const visibleConnectors = hydrated ? connectors : [];
+  const { nowSec: chainNowSec } = useChainTime();
   const { positions, isLoading: positionsLoading, refetch: refetchPositions } = useMyPositions();
   const { rewards, isLoading: rewardsLoading, refetch: refetchRewards } = useMyRewards();
 
@@ -185,11 +182,19 @@ export default function DashboardPage() {
     address: DAPP_CONTRACT_ADDRESS,
     abi: DAPP_ABI,
     functionName: "referrerOf",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    args: walletAddress ? [walletAddress] : undefined,
+    query: { enabled: !!walletAddress },
+  });
+  const { data: ownerRaw } = useReadContract({
+    address: DAPP_CONTRACT_ADDRESS,
+    abi: DAPP_ABI,
+    functionName: "owner",
   });
   const boundReferrer = boundReferrerRaw as `0x${string}` | undefined;
+  const contractOwner = ownerRaw as `0x${string}` | undefined;
   const hasBoundReferrer = !!boundReferrer && boundReferrer !== ZERO_ADDRESS;
+  const isContractOwner = !!walletAddress && !!contractOwner && walletAddress.toLowerCase() === contractOwner.toLowerCase();
+  const boundReferrerLabel = boundReferrer === ROOT_REFERRER ? "根节点" : formatAddress(boundReferrer ?? "");
 
   const {
     writeContract: writeBindReferrer,
@@ -200,17 +205,16 @@ export default function DashboardPage() {
   const { isLoading: isBindReferrerConfirming, isSuccess: isBindReferrerSuccess } =
     useWaitForTransactionReceipt({ hash: bindReferrerTxHash });
 
-  // 每分钟刷新一次「当前时间」，驱动进度条更新
-  const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNowMs(Date.now()), 60_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const [refInput, setRefInput] = useState(getInitialReferrerInput);
+  const [refInput, setRefInput] = useState("");
   const [refMsg, setRefMsg] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [addrCopied, setAddrCopied] = useState(false);
+
+  useEffect(() => {
+    if (!hydrated || refInput) return;
+    const urlRef = new URLSearchParams(window.location.search).get("ref");
+    if (urlRef && isAddress(urlRef)) setRefInput(urlRef);
+  }, [hydrated, refInput]);
 
   useEffect(() => {
     if (!isBindReferrerSuccess) return;
@@ -226,11 +230,21 @@ export default function DashboardPage() {
 
   const bindRef = useCallback(() => {
     const v = refInput.trim();
-    if (!address) { setRefMsg("请先连接钱包"); return; }
+    if (!walletAddress) { setRefMsg("请先连接钱包"); return; }
     if (hasBoundReferrer) { setRefMsg("当前地址已绑定上级"); return; }
     if (!v) { setRefMsg("请输入上级地址"); return; }
     if (!isAddress(v)) { setRefMsg("地址格式不正确"); return; }
-    if (v.toLowerCase() === address.toLowerCase()) { setRefMsg("不能绑定自己的地址"); return; }
+    const isSelfBinding = v.toLowerCase() === walletAddress.toLowerCase();
+    if (isSelfBinding && !isContractOwner) {
+      setRefMsg("只有合约 owner 可以绑定自己作为根节点");
+      return;
+    }
+    if (v.toLowerCase() === ROOT_REFERRER.toLowerCase() && !isContractOwner) {
+      setRefMsg("根节点地址仅合约 owner 可绑定");
+      return;
+    }
+
+    const referrerArg = isSelfBinding && isContractOwner ? ROOT_REFERRER : v as `0x${string}`;
 
     setRefMsg(null);
     resetBindReferrer();
@@ -238,26 +252,26 @@ export default function DashboardPage() {
       address: DAPP_CONTRACT_ADDRESS,
       abi: DAPP_ABI,
       functionName: "bindReferrer",
-      args: [v as `0x${string}`],
+      args: [referrerArg],
     });
-  }, [address, hasBoundReferrer, refInput, resetBindReferrer, writeBindReferrer]);
+  }, [hasBoundReferrer, isContractOwner, refInput, resetBindReferrer, walletAddress, writeBindReferrer]);
 
   const copyInvite = useCallback(() => {
-    if (!address) return;
-    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/dashboard?ref=${address}`;
+    if (!walletAddress) return;
+    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/dashboard?ref=${walletAddress}`;
     void navigator.clipboard.writeText(link).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
     });
-  }, [address]);
+  }, [walletAddress]);
 
   const copyAddr = useCallback(() => {
-    if (!address) return;
-    void navigator.clipboard.writeText(address).then(() => {
+    if (!walletAddress) return;
+    void navigator.clipboard.writeText(walletAddress).then(() => {
       setAddrCopied(true);
       setTimeout(() => setAddrCopied(false), 2000);
     });
-  }, [address]);
+  }, [walletAddress]);
 
   const pendingConnectorId =
     isPending && variables && typeof variables === "object" && "connector" in variables &&
@@ -301,13 +315,13 @@ export default function DashboardPage() {
           />
           {hasBoundReferrer && (
             <p className="mb-2.5 break-all rounded-lg border border-accent-green/20 bg-accent-green/10 px-3 py-2 text-[10px] text-accent-green sm:mb-3 sm:text-xs">
-              链上已绑定：{formatAddress(boundReferrer)}
+              链上已绑定：{boundReferrerLabel}
             </p>
           )}
           <Button
             className="mb-2.5 w-full sm:mb-3"
             loading={isBindReferrerPending || isBindReferrerConfirming}
-            disabled={hasBoundReferrer || !address}
+            disabled={hasBoundReferrer || !walletAddress}
             onClick={bindRef}
           >
             {isBindReferrerConfirming ? "链上确认中…" : hasBoundReferrer ? "已绑定" : "链上绑定"}
@@ -316,13 +330,13 @@ export default function DashboardPage() {
           <Button
             variant="secondary"
             className="w-full gap-2"
-            disabled={!address}
+            disabled={!walletAddress}
             onClick={copyInvite}
           >
             {inviteCopied ? <Check className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Copy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
             {inviteCopied ? "已复制" : "复制邀请链接"}
           </Button>
-          {!address && (
+          {!walletAddress && (
             <p className="mt-2 text-center text-[10px] text-text-muted">连接钱包后可生成您的邀请链接</p>
           )}
         </Card>
@@ -333,7 +347,7 @@ export default function DashboardPage() {
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
           <Wallet className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />收益统计
         </h2>
-        {!isConnected || !address ? (
+        {!walletConnected ? (
           <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钱包</p></Card>
         ) : rewardsLoading ? (
           <div className="grid grid-cols-2 gap-3 sm:gap-4">
@@ -369,9 +383,9 @@ export default function DashboardPage() {
         <h2 className="mb-3 flex items-center gap-2 text-base font-semibold text-text-secondary sm:mb-4 sm:text-lg">
           <FileText className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />认购记录
         </h2>
-        {!isConnected || !address ? (
+        {!walletConnected ? (
           <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钱包</p></Card>
-        ) : positionsLoading ? (
+        ) : positionsLoading || chainNowSec === undefined ? (
           <div className="space-y-3">
             <Skeleton className="h-28 w-full" />
             <Skeleton className="h-28 w-full" />
@@ -384,7 +398,7 @@ export default function DashboardPage() {
               <PositionCard
                 key={position.id}
                 position={position}
-                nowMs={nowMs}
+                nowSec={chainNowSec}
                 onSettled={refreshDashboardData}
               />
             ))}
@@ -398,11 +412,18 @@ export default function DashboardPage() {
           <Wallet className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />链上钱包
         </h2>
 
-        {!isConnected || !address ? (
+        {!walletConnected ? (
           <>
             <p className="mb-2.5 text-xs text-text-muted sm:mb-3 sm:text-sm">选择连接方式</p>
             <div className="space-y-2.5 sm:space-y-3">
-              {connectors.map((c) => {
+              {visibleConnectors.length === 0 ? (
+                <Card className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">正在读取钱包连接方式</p>
+                    <p className="mt-0.5 text-[10px] text-text-muted sm:text-xs">请稍候</p>
+                  </div>
+                </Card>
+              ) : visibleConnectors.map((c) => {
                 const loading = isPending && pendingConnectorId === c.id;
                 return (
                   <Card key={c.uid} hover className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
@@ -462,20 +483,20 @@ export default function DashboardPage() {
                   <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-text-muted sm:text-xs">钱包地址</p>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                     <code className="block break-all rounded-lg border border-card-border bg-white/5 px-2.5 py-2 font-mono text-[10px] text-cyber-blue sm:px-3 sm:py-2.5 sm:text-sm">
-                      {address}
+                      {walletAddress}
                     </code>
                     <Button variant="secondary" size="sm" className="w-full shrink-0 gap-1.5 sm:w-auto" onClick={copyAddr}>
                       {addrCopied ? <Check className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> : <Copy className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
                       {addrCopied ? "已复制" : "复制"}
                     </Button>
                   </div>
-                  <p className="mt-1 text-[10px] text-text-muted">缩略：{formatAddress(address)}</p>
+                  <p className="mt-1 text-[10px] text-text-muted">缩略：{formatAddress(walletAddress)}</p>
                 </div>
                 <div className="grid gap-2.5 border-t border-card-border pt-3 sm:grid-cols-2 sm:gap-3 sm:pt-4">
                   <div>
                     <p className="mb-0.5 text-[10px] text-text-muted sm:mb-1 sm:text-xs">当前网络</p>
                     <p className="text-sm font-medium text-text-primary">
-                      {chainId === dorNetwork.id ? dorNetwork.name : chainId != null ? `链 ID ${chainId}` : "—"}
+                      {walletChainId === dorNetwork.id ? dorNetwork.name : walletChainId != null ? `链 ID ${walletChainId}` : "—"}
                     </p>
                   </div>
                   <div>

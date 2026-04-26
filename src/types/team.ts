@@ -26,6 +26,8 @@ export interface TeamInfo {
   minorPerformance: bigint;
   /** 当前 V 等级 */
   vLevel: VLevel;
+  /** 是否运营中心 */
+  operationCenter: boolean;
   /** 直推收益累计 */
   referralReward: bigint;
   /** 团队极差收益累计 */

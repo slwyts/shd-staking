@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import { keccak256, parseUnits, toBytes } from "viem";
 import { HeroBanner } from "@/components/three/HeroBanner";
@@ -15,6 +15,7 @@ import { DAPP_ABI } from "@/constants/abis/generated";
 import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { useDappTokenAddress } from "@/hooks/dapp/useDappTokenAddress";
 import { useTokenApproval } from "@/hooks/token/useTokenApproval";
+import { useChainTime } from "@/hooks/common/useChainTime";
 import { useWallet } from "@/hooks/common/useWallet";
 
 const PRODUCT_PACKAGES = [
@@ -35,8 +36,17 @@ type PendingPackageOrder = {
   orderRef: `0x${string}`;
 };
 
+type PendingPackageApproval = {
+  walletAddress: `0x${string}`;
+  phone: string;
+  sn: string;
+  pkg: ProductPackage;
+  amount: bigint;
+};
+
 export default function HomePage() {
   const { address, isConnected, connectWallet } = useWallet();
+  const { nowSec: chainNowSec } = useChainTime();
   const { shdTokenAddress } = useDappTokenAddress();
   const [selectedPackage, setSelectedPackage] = useState<ProductPackage | null>(null);
   const [phone, setPhone] = useState("");
@@ -46,6 +56,7 @@ export default function HomePage() {
   const [callbackTxHash, setCallbackTxHash] = useState<`0x${string}` | null>(null);
   const [approvalTarget, setApprovalTarget] = useState<bigint>(BigInt(0));
   const [approvedAmount, setApprovedAmount] = useState<bigint>(BigInt(0));
+  const [pendingPackageApproval, setPendingPackageApproval] = useState<PendingPackageApproval | null>(null);
 
   const {
     approve,
@@ -80,6 +91,43 @@ export default function HomePage() {
     setApprovedAmount(approvalTarget);
     void refetchAllowance();
   }, [approvalTarget, approvedAmount, isApproveConfirmed, refetchAllowance]);
+
+  const submitPackagePurchase = useCallback((order: PendingPackageApproval) => {
+    if (chainNowSec === undefined) {
+      setPackageMsg("正在读取链上时间，请稍后再试");
+      return;
+    }
+
+    const orderRef = keccak256(
+      toBytes(`${order.walletAddress}:${order.phone}:${order.sn}:${order.pkg.amount}:${chainNowSec}`)
+    );
+
+    setPackageMsg(null);
+    setCallbackTxHash(null);
+    setPendingOrder({
+      walletAddress: order.walletAddress,
+      phone: order.phone,
+      sn: order.sn,
+      packageAmount: order.pkg.amount,
+      orderRef,
+    });
+    resetPurchase();
+    writeContract({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "purchasePackage",
+      args: [order.amount, orderRef],
+    });
+  }, [chainNowSec, resetPurchase, writeContract]);
+
+  useEffect(() => {
+    if (!isApproveConfirmed || !pendingPackageApproval) return;
+    setApprovedAmount(pendingPackageApproval.amount);
+    void refetchAllowance();
+    setPackageMsg("授权成功，正在发起扣款…");
+    submitPackagePurchase(pendingPackageApproval);
+    setPendingPackageApproval(null);
+  }, [isApproveConfirmed, pendingPackageApproval, refetchAllowance, submitPackagePurchase]);
 
   useEffect(() => {
     if (!isPurchaseConfirmed || !packageTxHash || !pendingOrder || callbackTxHash === packageTxHash) return;
@@ -127,6 +175,10 @@ export default function HomePage() {
       setPackageMsg("正在读取 SHD 合约地址，请稍后再试");
       return;
     }
+    if (chainNowSec === undefined) {
+      setPackageMsg("正在读取链上时间，请稍后再试");
+      return;
+    }
 
     const nextPhone = phone.trim();
     const nextSn = sn.trim();
@@ -140,31 +192,25 @@ export default function HomePage() {
     }
 
     if (packageNeedsApproval) {
-      setPackageMsg(null);
+      setPackageMsg("授权确认后将自动发起扣款");
       setApprovalTarget(selectedAmount);
+      setPendingPackageApproval({
+        walletAddress: address,
+        phone: nextPhone,
+        sn: nextSn,
+        pkg: selectedPackage,
+        amount: selectedAmount,
+      });
       approve(String(selectedPackage.amount), 18);
       return;
     }
 
-    const orderRef = keccak256(
-      toBytes(`${address}:${nextPhone}:${nextSn}:${selectedPackage.amount}:${Date.now()}`)
-    );
-
-    setPackageMsg(null);
-    setCallbackTxHash(null);
-    setPendingOrder({
+    submitPackagePurchase({
       walletAddress: address,
       phone: nextPhone,
       sn: nextSn,
-      packageAmount: selectedPackage.amount,
-      orderRef,
-    });
-    resetPurchase();
-    writeContract({
-      address: DAPP_CONTRACT_ADDRESS,
-      abi: DAPP_ABI,
-      functionName: "purchasePackage",
-      args: [selectedAmount, orderRef],
+      pkg: selectedPackage,
+      amount: selectedAmount,
     });
   };
 

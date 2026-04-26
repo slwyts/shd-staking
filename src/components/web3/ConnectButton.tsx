@@ -4,6 +4,7 @@ import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { Wallet, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { dorNetwork } from "@/config/chains";
+import { useHydrated } from "@/hooks/common/useHydrated";
 import { formatAddress } from "@/utils/format";
 
 type ConnectButtonSize = "sm" | "md" | "lg";
@@ -22,22 +23,25 @@ export function ConnectButton({
   className = "",
   heroCta = false,
 }: ConnectButtonProps) {
+  const hydrated = useHydrated();
   const { address, isConnected } = useAccount();
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
+  const walletAddress = hydrated ? address : undefined;
+  const visibleConnectors = hydrated ? connectors : [];
 
   const onConnect = () => {
-    const connector = connectors[0];
+    const connector = visibleConnectors[0];
     if (connector) connect({ connector, chainId: dorNetwork.id });
   };
 
-  if (isConnected && address) {
+  if (hydrated && isConnected && walletAddress) {
     return (
       <div className={`flex items-center gap-2 ${className}`}>
         <span className={`rounded-lg border border-card-border bg-white/5 font-mono text-cyber-blue ${
           size === "lg" || heroCta ? "px-4 py-2.5 text-sm" : "px-3 py-1.5 text-xs"
         }`}>
-          {formatAddress(address)}
+          {formatAddress(walletAddress)}
         </span>
         <Button variant="ghost" size={heroCta ? "lg" : size} className="gap-1" onClick={() => disconnect()}>
           <LogOut className="h-3.5 w-3.5" />断开
@@ -51,7 +55,7 @@ export function ConnectButton({
       <button
         type="button"
         className={`${heroCtaButtonClassName} ${className}`}
-        disabled={isPending}
+        disabled={!hydrated || isPending || visibleConnectors.length === 0}
         onClick={onConnect}
       >
         {isPending ? "连接中..." : <><Wallet className="mr-2 h-5 w-5" />连接钱包</>}
@@ -61,7 +65,7 @@ export function ConnectButton({
 
   return (
     <div className={className}>
-      <Button size={size} loading={isPending} className="gap-1.5" onClick={onConnect}>
+      <Button size={size} loading={isPending} disabled={!hydrated || visibleConnectors.length === 0} className="gap-1.5" onClick={onConnect}>
         <Wallet className="h-4 w-4" />连接钱包
       </Button>
     </div>

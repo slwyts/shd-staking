@@ -35,30 +35,34 @@ async function deployContract({ publicClient, walletClient, artifact, args }) {
   return { address: getAddress(receipt.contractAddress), hash };
 }
 
-export async function deployLocalDapp({ rootDir, rpcUrl, chainId }) {
+export async function deployLocalDapp({ rootDir, rpcUrl, chainId, initialOwner }) {
   const { account, publicClient, walletClient } = createClients({
     rpcUrl,
     chainId,
     privateKey: DEFAULT_HARDHAT_PRIVATE_KEY,
   });
+  const owner = initialOwner ? getAddress(initialOwner) : account.address;
   const mockArtifact = readArtifact(rootDir, "artifacts/contracts/mocks/MockSHD.sol/MockSHD.json");
   const dappArtifact = readArtifact(rootDir, "artifacts/contracts/SHDStaking.sol/SHDStaking.json");
+  const localSupply = parseEther("200000000");
+  const localShare = localSupply / 2n;
 
   console.log(`Deploying local MockSHD from ${account.address}...`);
   const mock = await deployContract({
     publicClient,
     walletClient,
     artifact: mockArtifact,
-    args: [account.address, parseEther("200000000")],
+    args: [account.address, localSupply],
   });
   console.log(`MockSHD deployed: ${mock.address}`);
 
   console.log("Deploying local SHDStaking...");
+  console.log(`Initial owner: ${owner}`);
   const dapp = await deployContract({
     publicClient,
     walletClient,
     artifact: dappArtifact,
-    args: [mock.address, account.address],
+    args: [mock.address, owner],
   });
   console.log(`SHDStaking deployed: ${dapp.address}`);
 
@@ -66,12 +70,32 @@ export async function deployLocalDapp({ rootDir, rpcUrl, chainId }) {
     address: mock.address,
     abi: mockArtifact.abi,
     functionName: "transfer",
-    args: [dapp.address, parseEther("1000000")],
+    args: [dapp.address, localShare],
   });
   await publicClient.waitForTransactionReceipt({ hash: fundHash });
-  console.log("Funded local reward pool with 1,000,000 SHD");
+  console.log("Funded local DApp contract with 100,000,000 SHD");
 
-  return { dappAddress: dapp.address, shdTokenAddress: mock.address, deployer: account.address };
+  if (owner !== account.address) {
+    const ownerGasHash = await walletClient.sendTransaction({
+      to: owner,
+      value: parseEther("100"),
+    });
+    await publicClient.waitForTransactionReceipt({ hash: ownerGasHash });
+    console.log("Funded local owner with 100 native gas token");
+
+    const ownerFundHash = await walletClient.writeContract({
+      address: mock.address,
+      abi: mockArtifact.abi,
+      functionName: "transfer",
+      args: [owner, localShare],
+    });
+    await publicClient.waitForTransactionReceipt({ hash: ownerFundHash });
+    console.log("Funded local owner with 100,000,000 SHD");
+  } else {
+    console.log("Local owner keeps 100,000,000 SHD");
+  }
+
+  return { dappAddress: dapp.address, shdTokenAddress: mock.address, deployer: account.address, owner };
 }
 
 export async function deployProdDapp({ rootDir, rpcUrl, chainId, privateKey, shdTokenAddress, initialOwner }) {

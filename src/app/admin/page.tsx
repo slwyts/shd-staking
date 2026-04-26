@@ -1,6 +1,6 @@
 /**
  * @file app/admin/page.tsx
- * @description 管理控制台 — DApp 资金池管理与用户关系导入。
+ * @description 管理控制台 — DApp 资金池管理与用户数据导入。
  */
 "use client";
 
@@ -12,6 +12,7 @@ import { DAPP_ABI, ERC20_ABI } from "@/constants/abis/generated";
 import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { appMode } from "@/config/appMode";
 import { dorNetwork } from "@/config/chains";
+import { useHydrated } from "@/hooks/common/useHydrated";
 import { useDappTokenAddress } from "@/hooks/dapp/useDappTokenAddress";
 import { useTokenApproval } from "@/hooks/token/useTokenApproval";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -30,6 +31,31 @@ import {
 } from "lucide-react";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+type RelationImportType = "referrers" | "levels" | "operationCenters";
+
+const RELATION_IMPORT_OPTIONS: Array<{ key: RelationImportType; label: string }> = [
+  { key: "referrers", label: "邀请关系" },
+  { key: "levels", label: "用户级别" },
+  { key: "operationCenters", label: "运营中心" },
+];
+
+const RELATION_IMPORT_META: Record<RelationImportType, { helper: string; placeholder: string; button: string }> = {
+  referrers: {
+    helper: "每行格式：用户地址,推荐人地址。推荐人可填 0x0000000000000000000000000000000000000000 清空关系。",
+    placeholder: `0xUser,0xReferrer\n0xUser2,${ZERO_ADDRESS}`,
+    button: "导入邀请关系",
+  },
+  levels: {
+    helper: "每行格式：用户地址,级别。级别 0=普通，1=区县，2=市，3=省。",
+    placeholder: "0xUser,1\n0xUser2,3",
+    button: "导入用户级别",
+  },
+  operationCenters: {
+    helper: "每行格式：用户地址,是否运营中心。可填 true/false、1/0、是/否。",
+    placeholder: "0xUser,true\n0xUser2,false",
+    button: "导入运营中心",
+  },
+};
 
 function parseOperationFlag(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -38,34 +64,67 @@ function parseOperationFlag(value: string) {
   return null;
 }
 
-function parseRelationImport(input: string) {
+function parseImportRows(input: string) {
+  return input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).map((line) =>
+    line.split(/[\s,，]+/).map((cell) => cell.trim()).filter(Boolean)
+  );
+}
+
+function parseReferrerImport(input: string) {
   const users: `0x${string}`[] = [];
   const referrers: `0x${string}`[] = [];
-  const levels: number[] = [];
-  const operationCenters: boolean[] = [];
-  const lines = input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const rows = parseImportRows(input);
 
-  lines.forEach((line, index) => {
-    const cells = line.split(/[\s,，]+/).map((cell) => cell.trim()).filter(Boolean);
-    const [user, referrer = ZERO_ADDRESS, level = "0", operation = "false"] = cells;
+  rows.forEach((cells, index) => {
+    const [user, referrer] = cells;
     if (!user || !isAddress(user)) throw new Error(`第 ${index + 1} 行用户地址格式不正确`);
-    if (!isAddress(referrer)) throw new Error(`第 ${index + 1} 行推荐人地址格式不正确`);
+    if (!referrer || !isAddress(referrer)) throw new Error(`第 ${index + 1} 行推荐人地址格式不正确`);
+
+    users.push(user as `0x${string}`);
+    referrers.push(referrer as `0x${string}`);
+  });
+
+  return { users, referrers };
+}
+
+function parseLevelImport(input: string) {
+  const users: `0x${string}`[] = [];
+  const levels: number[] = [];
+  const rows = parseImportRows(input);
+
+  rows.forEach((cells, index) => {
+    const [user, level] = cells;
+    if (!user || !isAddress(user)) throw new Error(`第 ${index + 1} 行用户地址格式不正确`);
 
     const parsedLevel = Number(level);
     if (!Number.isInteger(parsedLevel) || parsedLevel < 0 || parsedLevel > 3) {
       throw new Error(`第 ${index + 1} 行用户级别必须是 0-3`);
     }
 
-    const parsedOperation = parseOperationFlag(operation);
+    users.push(user as `0x${string}`);
+    levels.push(parsedLevel);
+  });
+
+  return { users, levels };
+}
+
+function parseOperationCenterImport(input: string) {
+  const users: `0x${string}`[] = [];
+  const enabled: boolean[] = [];
+  const rows = parseImportRows(input);
+
+  rows.forEach((cells, index) => {
+    const [user, operation] = cells;
+    if (!user || !isAddress(user)) throw new Error(`第 ${index + 1} 行用户地址格式不正确`);
+
+    const parsedOperation = parseOperationFlag(operation ?? "");
     if (parsedOperation === null) throw new Error(`第 ${index + 1} 行运营中心字段格式不正确`);
 
     users.push(user as `0x${string}`);
-    referrers.push(referrer as `0x${string}`);
-    levels.push(parsedLevel);
-    operationCenters.push(parsedOperation);
+    enabled.push(parsedOperation);
   });
 
-  return { users, referrers, levels, operationCenters };
+  return { users, enabled };
 }
 
 function CopyAddressRow({ label, address }: { label: string; address: string }) {
@@ -96,11 +155,12 @@ function CopyAddressRow({ label, address }: { label: string; address: string }) 
 }
 
 export default function AdminPage() {
+  const hydrated = useHydrated();
   const { address, chainId } = useAccount();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const walletAddress = hydrated ? address : undefined;
+  const walletChainId = hydrated ? chainId : undefined;
 
-  const onChain = mounted && chainId === dorNetwork.id;
+  const onChain = walletChainId === dorNetwork.id;
   const { shdTokenAddress, isLoading: isShdAddressLoading } = useDappTokenAddress();
 
   const { data: poolBalanceRaw, isLoading: poolLoading } = useReadContract({
@@ -118,6 +178,7 @@ export default function AdminPage() {
   const [withdrawTo, setWithdrawTo] = useState("");
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [poolMsg, setPoolMsg] = useState<string | null>(null);
+  const [pendingFundAmount, setPendingFundAmount] = useState<bigint | null>(null);
 
   const {
     approve: approveFund,
@@ -139,8 +200,19 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (isFundApprovalConfirmed) void refetchFundAllowance();
-  }, [isFundApprovalConfirmed, refetchFundAllowance]);
+    if (!isFundApprovalConfirmed || pendingFundAmount === null) return;
+    setPoolMsg("授权成功，正在充入资金池…");
+    resetPoolWrite();
+    writePoolContract({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "fundRewards",
+      args: [pendingFundAmount],
+    });
+    setPendingFundAmount(null);
+  }, [isFundApprovalConfirmed, pendingFundAmount, refetchFundAllowance, resetPoolWrite, writePoolContract]);
 
+  const [relationImportType, setRelationImportType] = useState<RelationImportType>("referrers");
   const [relationInput, setRelationInput] = useState("");
   const [relationMsg, setRelationMsg] = useState<string | null>(null);
   const {
@@ -154,38 +226,57 @@ export default function AdminPage() {
 
   const handleImportRelations = useCallback(() => {
     setRelationMsg(null);
-    let parsed: ReturnType<typeof parseRelationImport>;
+    resetRelationWrite();
+
     try {
-      parsed = parseRelationImport(relationInput);
+      if (relationImportType === "referrers") {
+        const parsed = parseReferrerImport(relationInput);
+        if (parsed.users.length === 0) throw new Error("请至少输入一行用户数据");
+        writeRelationImport({
+          address: DAPP_CONTRACT_ADDRESS,
+          abi: DAPP_ABI,
+          functionName: "batchSetReferrers",
+          args: [parsed.users, parsed.referrers],
+        });
+        return;
+      }
+
+      if (relationImportType === "levels") {
+        const parsed = parseLevelImport(relationInput);
+        if (parsed.users.length === 0) throw new Error("请至少输入一行用户数据");
+        writeRelationImport({
+          address: DAPP_CONTRACT_ADDRESS,
+          abi: DAPP_ABI,
+          functionName: "batchSetUserLevels",
+          args: [parsed.users, parsed.levels],
+        });
+        return;
+      }
+
+      const parsed = parseOperationCenterImport(relationInput);
+      if (parsed.users.length === 0) throw new Error("请至少输入一行用户数据");
+      writeRelationImport({
+        address: DAPP_CONTRACT_ADDRESS,
+        abi: DAPP_ABI,
+        functionName: "batchSetOperationCenters",
+        args: [parsed.users, parsed.enabled],
+      });
     } catch (error) {
       setRelationMsg(error instanceof Error ? error.message : "导入内容格式不正确");
-      return;
     }
-
-    if (parsed.users.length === 0) {
-      setRelationMsg("请至少输入一行用户数据");
-      return;
-    }
-
-    resetRelationWrite();
-    writeRelationImport({
-      address: DAPP_CONTRACT_ADDRESS,
-      abi: DAPP_ABI,
-      functionName: "batchImportUsers",
-      args: [parsed.users, parsed.referrers, parsed.levels, parsed.operationCenters],
-    });
-  }, [relationInput, resetRelationWrite, writeRelationImport]);
+  }, [relationImportType, relationInput, resetRelationWrite, writeRelationImport]);
 
   const handleFundPool = useCallback(() => {
     setPoolMsg(null);
-    if (!address) { setPoolMsg("请先连接钱包"); return; }
+    if (!walletAddress) { setPoolMsg("请先连接钱包"); return; }
     if (!shdTokenAddress) { setPoolMsg("正在读取 SHD 合约地址，请稍后再试"); return; }
     if (!fundAmount || isNaN(Number(fundAmount)) || Number(fundAmount) <= 0) { setPoolMsg("请输入有效充币数量"); return; }
 
     const amount = parseEther(fundAmount);
     if (fundNeedsApproval(amount)) {
+      setPendingFundAmount(amount);
       approveFund(fundAmount, 18);
-      setPoolMsg("授权确认后，再次点击充入资金池");
+      setPoolMsg("授权确认后将自动充入资金池");
       return;
     }
 
@@ -196,11 +287,11 @@ export default function AdminPage() {
       functionName: "fundRewards",
       args: [amount],
     });
-  }, [address, approveFund, fundAmount, fundNeedsApproval, resetPoolWrite, shdTokenAddress, writePoolContract]);
+  }, [approveFund, fundAmount, fundNeedsApproval, resetPoolWrite, shdTokenAddress, walletAddress, writePoolContract]);
 
   const handleWithdrawPool = useCallback(() => {
     setPoolMsg(null);
-    const recipient = (withdrawTo.trim() || address) as `0x${string}` | undefined;
+    const recipient = (withdrawTo.trim() || walletAddress) as `0x${string}` | undefined;
     if (!recipient || !isAddress(recipient)) { setPoolMsg("提币地址格式不正确"); return; }
     if (!withdrawAmount || isNaN(Number(withdrawAmount)) || Number(withdrawAmount) <= 0) { setPoolMsg("请输入有效提币数量"); return; }
 
@@ -208,10 +299,10 @@ export default function AdminPage() {
     writePoolContract({
       address: DAPP_CONTRACT_ADDRESS,
       abi: DAPP_ABI,
-      functionName: "recoverExcessToken",
+      functionName: "withdrawShd",
       args: [recipient, parseEther(withdrawAmount)],
     });
-  }, [address, resetPoolWrite, withdrawAmount, withdrawTo, writePoolContract]);
+  }, [resetPoolWrite, walletAddress, withdrawAmount, withdrawTo, writePoolContract]);
 
   return (
     <PageContainer>
@@ -302,11 +393,11 @@ export default function AdminPage() {
             <div className="space-y-3 rounded-lg bg-white/[0.04] p-3 sm:p-4">
               <div className="flex items-center gap-2 text-xs font-medium text-amber-orange sm:text-sm">
                 <ArrowUpFromLine className="h-4 w-4" />
-                提取未锁定余额
+                提取合约余额
               </div>
               <input
                 type="text"
-                placeholder={address ?? "0x..."}
+                placeholder={walletAddress ?? "0x..."}
                 value={withdrawTo}
                 onChange={(event) => {
                   setWithdrawTo(event.target.value);
@@ -343,11 +434,31 @@ export default function AdminPage() {
         <Card className="border-cyber-blue/25 shadow-[0_0_28px_rgba(59,130,246,0.08)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
             <Upload className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />
-            用户关系导入（链上写入）
+            用户数据导入（链上写入）
           </div>
           <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 rounded-lg bg-white/[0.04] p-1">
+              {RELATION_IMPORT_OPTIONS.map((option) => (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => {
+                    setRelationImportType(option.key);
+                    setRelationInput("");
+                    setRelationMsg(null);
+                  }}
+                  className={`rounded-md px-2 py-2 text-xs font-medium transition-colors sm:text-sm ${
+                    relationImportType === option.key
+                      ? "bg-cyber-blue text-white"
+                      : "text-text-muted hover:bg-white/10 hover:text-text-primary"
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
             <div className="rounded-lg bg-white/[0.04] p-3 text-[10px] leading-relaxed text-text-muted sm:text-xs">
-              每行格式：用户地址,推荐人地址,级别,是否运营中心。级别 0=普通，1=区县，2=市，3=省；运营中心可填 true/false 或 1/0。
+              {RELATION_IMPORT_META[relationImportType].helper}
             </div>
             <textarea
               value={relationInput}
@@ -355,7 +466,7 @@ export default function AdminPage() {
                 setRelationInput(event.target.value);
                 setRelationMsg(null);
               }}
-              placeholder={`0xUser,0xReferrer,1,true\n0xUser2,${ZERO_ADDRESS},0,false`}
+              placeholder={RELATION_IMPORT_META[relationImportType].placeholder}
               className="min-h-36 w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 font-mono text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
             />
             {relationMsg && <p className="text-xs text-error">{relationMsg}</p>}
@@ -365,7 +476,7 @@ export default function AdminPage() {
               loading={isRelationPending || isRelationConfirming}
               onClick={handleImportRelations}
             >
-              {isRelationPending ? "等待签名..." : isRelationConfirming ? "确认中..." : "导入关系"}
+              {isRelationPending ? "等待签名..." : isRelationConfirming ? "确认中..." : RELATION_IMPORT_META[relationImportType].button}
             </Button>
           </div>
         </Card>
