@@ -16,8 +16,6 @@ export const siteConfig = {
     chainWebsite: "https://website.bjwmls.com/",
     /** 区块浏览器 */
     explorer: "https://block.bjwmls.com",
-    /** SWAP 接口地址 */
-    swapApi: "https://test-swap.bjwmls.com",
     /** 钱包下载 */
     walletDownload: "https://oss.bjwmls.com/cross/app-release.apk",
   },

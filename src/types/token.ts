@@ -9,8 +9,6 @@ export interface TokenInfo {
   name: string;
   /** 代币符号 */
   symbol: string;
-  /** 合约地址 */
-  address: `0x${string}`;
   /** 精度 */
   decimals: number;
   /** 总发行量描述 */

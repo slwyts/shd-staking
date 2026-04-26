@@ -3,17 +3,11 @@
  * @description 数据资产信息常量 — 三种核心数据资产的基础信息定义。
  */
 import type { TokenInfo } from "@/types/token";
-import {
-  SHD_TOKEN_ADDRESS,
-  DHC_TOKEN_ADDRESS,
-  SCNY_TOKEN_ADDRESS,
-} from "./contracts";
 
 /** SHD — 商合道酒类交易平台生态数据资产 */
 export const SHD_TOKEN: TokenInfo = {
   name: "生态数据资产",
   symbol: "SHD",
-  address: SHD_TOKEN_ADDRESS,
   decimals: 18,
   totalSupplyLabel: "2亿",
   color: "#00D4FF",
@@ -23,7 +17,6 @@ export const SHD_TOKEN: TokenInfo = {
 export const DHC_TOKEN: TokenInfo = {
   name: "帝皇池酱酒数据资产",
   symbol: "DHC",
-  address: DHC_TOKEN_ADDRESS,
   decimals: 18,
   totalSupplyLabel: "10亿",
   color: "#A855F7",
@@ -33,7 +26,6 @@ export const DHC_TOKEN: TokenInfo = {
 export const SCNY_TOKEN: TokenInfo = {
   name: "酒类交易平台稳定数据资产",
   symbol: "SCNY",
-  address: SCNY_TOKEN_ADDRESS,
   decimals: 18,
   totalSupplyLabel: "100亿",
   color: "#00FF88",

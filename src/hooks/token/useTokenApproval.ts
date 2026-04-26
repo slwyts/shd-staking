@@ -6,7 +6,7 @@
 "use client";
 
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { SHD_TOKEN_ABI } from "@/constants/abis/SHDToken";
+import { ERC20_ABI } from "@/constants/abis/generated";
 import { parseUnits } from "viem";
 
 /**
@@ -15,19 +15,19 @@ import { parseUnits } from "viem";
  * @param spender - 被授权的合约地址
  */
 export function useTokenApproval(
-  tokenAddress: `0x${string}`,
-  spender: `0x${string}`
+  tokenAddress: `0x${string}` | undefined,
+  spender: `0x${string}` | undefined
 ) {
   const { address } = useAccount();
 
   // 查询当前授权额度
   const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: tokenAddress,
-    abi: SHD_TOKEN_ABI,
+    abi: ERC20_ABI,
     functionName: "allowance",
-    args: address ? [address, spender] : undefined,
+    args: address && spender ? [address, spender] : undefined,
     query: {
-      enabled: !!address,
+      enabled: !!address && !!tokenAddress && !!spender,
     },
   });
 
@@ -48,10 +48,11 @@ export function useTokenApproval(
    * @param decimals - 代币精度
    */
   const approve = (amount: string, decimals: number = 18) => {
+    if (!tokenAddress || !spender) return;
     const parsedAmount = parseUnits(amount, decimals);
     writeContract({
       address: tokenAddress,
-      abi: SHD_TOKEN_ABI,
+      abi: ERC20_ABI,
       functionName: "approve",
       args: [spender, parsedAmount],
     });
@@ -62,6 +63,7 @@ export function useTokenApproval(
    * @param requiredAmount - 需要的最小额度 (wei)
    */
   const needsApproval = (requiredAmount: bigint): boolean => {
+    if (!tokenAddress || !spender) return true;
     if (!allowance) return true;
     return (allowance as bigint) < requiredAmount;
   };

@@ -6,23 +6,23 @@
 "use client";
 
 import { useAccount, useReadContract } from "wagmi";
-import { SHD_TOKEN_ABI } from "@/constants/abis/SHDToken";
+import { ERC20_ABI } from "@/constants/abis/generated";
 
 /**
  * useTokenBalance — 查询指定代币余额
  * @param tokenAddress - ERC20 代币合约地址
  * @returns 余额数据与加载状态
  */
-export function useTokenBalance(tokenAddress: `0x${string}`) {
+export function useTokenBalance(tokenAddress: `0x${string}` | undefined) {
   const { address } = useAccount();
 
   const { data: balance, isLoading, refetch } = useReadContract({
     address: tokenAddress,
-    abi: SHD_TOKEN_ABI,
+    abi: ERC20_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: {
-      enabled: !!address,
+      enabled: !!address && !!tokenAddress,
     },
   });
 

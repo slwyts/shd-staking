@@ -5,23 +5,21 @@
 
 /** 质押周期对应的日化收益率 (%) */
 export const STAKING_DAILY_RATES: Record<number, number> = {
-  7: 0.3,
-  30: 0.5,
   90: 0.5,
   180: 1.0,
   360: 1.2,
 };
 
 /** 直推收益比例 */
-export const REFERRAL_RATE = 0.1; // 10%
+export const REFERRAL_RATE = 0.05; // 5%
 
-/** 盈利税总比例 */
-export const PROFIT_TAX_RATE = 0.3; // 30%
+/** 到期结算盈利税比例，盈利部分 50% 转入 dead */
+export const PROFIT_TAX_RATE = 0.5; // 50%
 
 /**
  * 计算质押预估收益
  * @param amount - 质押金额
- * @param days - 质押天数 (7/30/180/360)
+ * @param days - 质押天数 (90/180/360)
  * @returns 预估总收益
  */
 export function calcStakingReward(amount: number, days: number): number {
@@ -31,63 +29,16 @@ export function calcStakingReward(amount: number, days: number): number {
 }
 
 /**
- * 根据锁仓天数匹配最接近的日化收益率
- * 规则：取不超过该天数的最高档位。如 90 天 → 90 天档 0.5%，200 天 → 180 天档 1%
+ * 计算到期结算时用户实际获得的静态收益。
+ */
+export function calcNetSettlementReward(amount: number, days: number): number {
+  return calcStakingReward(amount, days) * (1 - PROFIT_TAX_RATE);
+}
+
+/**
+ * 根据锁仓天数匹配日化收益率
  */
 export function getDailyRateForLockDays(days: number): number {
-  const tiers = [360, 180, 90, 30, 7] as const;
-  for (const tier of tiers) {
-    if (days >= tier) return STAKING_DAILY_RATES[tier];
-  }
-  return 0;
+  return STAKING_DAILY_RATES[days] ?? 0;
 }
 
-/**
- * 计算盈利税分配
- * @param profit - 盈利金额
- * @returns 各项税费分配明细
- */
-export function calcProfitTax(profit: number) {
-  const totalTax = profit * PROFIT_TAX_RATE;
-  return {
-    /** 总税费 */
-    total: totalTax,
-    /** LP 分红 (10%) */
-    lpDividend: profit * 0.1,
-    /** 营销费用 (10%) */
-    marketing: profit * 0.1,
-    /** 回购 SHD (10%) */
-    buyback: profit * 0.1,
-    /** 税后利润 */
-    afterTax: profit - totalTax,
-  };
-}
-
-/**
- * 计算买入/卖出滑点扣税
- * @param amount - 交易金额
- * @param direction - "buy" 买入 | "sell" 卖出
- * @returns 滑点扣税明细
- */
-export function calcSlippage(amount: number, direction: "buy" | "sell") {
-  const totalRate = 0.035; // 3.5%
-  const total = amount * totalRate;
-
-  if (direction === "buy") {
-    return {
-      total,
-      lpDividend: amount * 0.015,   // 1.5% -> LP 分红
-      burn: amount * 0.02,          // 2.0% -> 销毁
-      received: amount - total,
-    };
-  }
-
-  // 卖出
-  return {
-    total,
-    lpDividend: amount * 0.015,     // 1.5% -> LP 分红
-    marketing: amount * 0.015,      // 1.5% -> 营销补贴
-    poolReturn: amount * 0.005,     // 0.5% -> 回流底池
-    received: amount - total,
-  };
-}

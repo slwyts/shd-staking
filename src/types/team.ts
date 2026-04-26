@@ -3,8 +3,8 @@
  * @description 团队层级与 V 等级相关 TypeScript 类型定义。
  */
 
-/** V 等级枚举 (V1-V6) */
-export type VLevel = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+/** 区域代理等级枚举：0普通、1区县、2市、3省 */
+export type VLevel = 0 | 1 | 2 | 3;
 
 /** V 等级配置 */
 export interface VLevelConfig {
@@ -12,9 +12,9 @@ export interface VLevelConfig {
   level: VLevel;
   /** 等级名称 */
   label: string;
-  /** 极差比例 (%) */
+  /** 展示用比例 (%)，实际团队极差按质押周期决定 */
   rate: number;
-  /** 所需小区业绩 (万) */
+  /** 保留字段，当前等级由后台导入 */
   requiredMinorPerformance: number;
 }
 
@@ -24,9 +24,9 @@ export interface TeamInfo {
   directCount: number;
   /** 团队总人数 */
   totalMembers: number;
-  /** 大区业绩 */
+  /** 当前活跃质押 */
   majorPerformance: bigint;
-  /** 小区业绩（除大区外所有线业绩之和） */
+  /** 保留字段 */
   minorPerformance: bigint;
   /** 当前 V 等级 */
   vLevel: VLevel;
@@ -36,13 +36,10 @@ export interface TeamInfo {
   teamReward: bigint;
 }
 
-/** V 等级配置表 */
+/** 区域代理等级配置表 */
 export const V_LEVEL_CONFIG: VLevelConfig[] = [
   { level: 0, label: "普通用户", rate: 0, requiredMinorPerformance: 0 },
-  { level: 1, label: "V1", rate: 5, requiredMinorPerformance: 1 },
-  { level: 2, label: "V2", rate: 10, requiredMinorPerformance: 5 },
-  { level: 3, label: "V3", rate: 15, requiredMinorPerformance: 10 },
-  { level: 4, label: "V4", rate: 20, requiredMinorPerformance: 30 },
-  { level: 5, label: "V5", rate: 25, requiredMinorPerformance: 50 },
-  { level: 6, label: "V6", rate: 0, requiredMinorPerformance: 100 },
+  { level: 1, label: "区县代理", rate: 0, requiredMinorPerformance: 0 },
+  { level: 2, label: "市级代理", rate: 0, requiredMinorPerformance: 0 },
+  { level: 3, label: "省级代理", rate: 0, requiredMinorPerformance: 0 },
 ];

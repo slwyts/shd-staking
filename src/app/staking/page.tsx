@@ -5,10 +5,10 @@
  */
 "use client";
 
-import { Suspense, useState, useMemo, useCallback, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
-import { Wallet, Lock, Calculator } from "lucide-react";
-import { isAddress, parseUnits } from "viem";
+import Link from "next/link";
+import { Suspense, useState, useMemo, useCallback } from "react";
+import { useReadContract } from "wagmi";
+import { parseUnits } from "viem";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { NetworkGuard } from "@/components/web3/NetworkGuard";
 import { Card } from "@/components/ui/Card";
@@ -17,14 +17,14 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { useWallet } from "@/hooks/common/useWallet";
-import { useStakingPools } from "@/hooks/staking/useStakingPools";
+import { useDappTokenAddress } from "@/hooks/dapp/useDappTokenAddress";
 import { useStake } from "@/hooks/staking/useStake";
 import { useTokenBalance } from "@/hooks/token/useTokenBalance";
 import { useTokenApproval } from "@/hooks/token/useTokenApproval";
-import { SHD_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
-import { STORAGE_PREFERRED_REFERRER } from "@/constants/storageKeys";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { calcStakingReward, STAKING_DAILY_RATES } from "@/utils/calc";
-import { formatTokenAmount } from "@/utils/format";
+import { formatAddress, formatTokenAmount } from "@/utils/format";
 import type { StakingPeriod } from "@/types/staking";
 
 /** 周期选项卡数据 */
@@ -34,44 +34,34 @@ const PERIOD_TABS = [
   { key: "360", label: "360 天" },
 ];
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+
 function StakingPageInner() {
-  const searchParams = useSearchParams();
-  const { isConnected, connectWallet } = useWallet();
-  const { pools } = useStakingPools();
+  const { address, isConnected, connectWallet } = useWallet();
+  const { shdTokenAddress } = useDappTokenAddress();
   const { stake, isSending, isConfirming, isConfirmed } = useStake();
-  const { balance: shdBalance } = useTokenBalance(SHD_TOKEN_ADDRESS);
+  const { balance: shdBalance } = useTokenBalance(shdTokenAddress);
+  const { data: boundReferrer, isLoading: isReferrerLoading } = useReadContract({
+    address: DAPP_CONTRACT_ADDRESS,
+    abi: DAPP_ABI,
+    functionName: "referrerOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
   const {
     approve,
     needsApproval,
     isApproving,
     isConfirming: isApproveConfirming,
     isConfirmed: isApproveConfirmed,
-  } = useTokenApproval(SHD_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS);
+  } = useTokenApproval(shdTokenAddress, DAPP_CONTRACT_ADDRESS);
 
   const [selectedPeriod, setSelectedPeriod] = useState<string>("90");
   const [amount, setAmount] = useState("");
-  const [referrer, setReferrer] = useState("");
+  const [stakeMsg, setStakeMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    const ref = searchParams.get("ref");
-    if (ref && isAddress(ref)) {
-      setReferrer(ref);
-      try {
-        localStorage.setItem(STORAGE_PREFERRED_REFERRER, ref);
-      } catch {
-        /* */
-      }
-      return;
-    }
-    try {
-      const saved = localStorage.getItem(STORAGE_PREFERRED_REFERRER);
-      if (saved && isAddress(saved)) {
-        setReferrer((prev) => prev || saved);
-      }
-    } catch {
-      /* */
-    }
-  }, [searchParams]);
+  const boundReferrerAddress = boundReferrer as `0x${string}` | undefined;
+  const hasBoundReferrer = !!boundReferrerAddress && boundReferrerAddress !== ZERO_ADDRESS;
 
   const periodDays = Number(selectedPeriod) as StakingPeriod;
   const dailyRate = STAKING_DAILY_RATES[periodDays] ?? 0;
@@ -90,16 +80,28 @@ function StakingPageInner() {
 
   const handleApprove = () => {
     if (!amount) return;
+    if (!shdTokenAddress) {
+      setStakeMsg("正在读取 SHD 合约地址，请稍后再试");
+      return;
+    }
     approve(amount, 18);
   };
 
   const handleStake = () => {
     if (!amount || numericAmount <= 0) return;
+    setStakeMsg(null);
+    if (!hasBoundReferrer) {
+      setStakeMsg("请先在个人中心绑定上级");
+      return;
+    }
+    if (!shdTokenAddress) {
+      setStakeMsg("正在读取 SHD 合约地址，请稍后再试");
+      return;
+    }
     const parsedAmount = parseUnits(amount, 18);
     stake({
       amount: parsedAmount,
       period: periodDays,
-      referrer: referrer ? (referrer as `0x${string}`) : undefined,
     });
   };
 
@@ -143,7 +145,10 @@ function StakingPageInner() {
                   type="number"
                   placeholder="请输入认购 SHD 数量"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
+                  onChange={(e) => {
+                    setAmount(e.target.value);
+                    setStakeMsg(null);
+                  }}
                   suffix={
                     <div className="flex items-center gap-2">
                       <button
@@ -167,12 +172,31 @@ function StakingPageInner() {
             {/* 推荐人 */}
             <div className="animate-slide-up opacity-0" style={{ animationDelay: "0.24s" }}>
               <Card>
-                <Input
-                  label="推荐人地址（可选）"
-                  placeholder="0x..."
-                  value={referrer}
-                  onChange={(e) => setReferrer(e.target.value)}
-                />
+                <h3 className="mb-3 text-xs font-medium text-text-secondary sm:mb-4 sm:text-sm">
+                  推荐关系
+                </h3>
+                {!isConnected ? (
+                  <p className="text-xs text-text-muted sm:text-sm">连接钱包后检查链上绑定状态</p>
+                ) : isReferrerLoading ? (
+                  <p className="text-xs text-text-muted sm:text-sm">正在检查绑定状态…</p>
+                ) : hasBoundReferrer ? (
+                  <div className="rounded-lg border border-accent-green/20 bg-accent-green/10 px-3 py-2.5">
+                    <p className="text-[10px] text-accent-green sm:text-xs">已绑定上级</p>
+                    <p className="mt-1 break-all font-mono text-xs text-text-primary sm:text-sm">
+                      {formatAddress(boundReferrerAddress)}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs text-text-muted sm:text-sm">当前地址尚未绑定上级，绑定后才能认购 SHD。</p>
+                    <Link
+                      href="/dashboard"
+                      className="inline-flex w-full items-center justify-center rounded-lg border border-card-border px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:border-cyber-blue/30 hover:bg-white/5 sm:w-auto"
+                    >
+                      去个人中心绑定
+                    </Link>
+                  </div>
+                )}
               </Card>
             </div>
 
@@ -194,7 +218,7 @@ function StakingPageInner() {
                 <Button
                   onClick={handleStake}
                   loading={isSending || isConfirming}
-                  disabled={numericAmount <= 0}
+                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer}
                   className="flex-1"
                 >
                   {isConfirming
@@ -205,6 +229,7 @@ function StakingPageInner() {
                 </Button>
               )}
             </div>
+            {stakeMsg && <p className="text-center text-xs text-error">{stakeMsg}</p>}
           </div>
 
           {/* 右侧 — 收益预估面板 */}

@@ -4,7 +4,7 @@
  */
 
 /** 质押周期枚举 */
-export type StakingPeriod = 7 | 30 | 90 | 180 | 360;
+export type StakingPeriod = 90 | 180 | 360;
 
 /** 质押池信息 */
 export interface StakingPool {
@@ -36,6 +36,31 @@ export interface StakingPosition {
   pendingReward: bigint;
   /** 是否已解除 */
   isUnstaked: boolean;
+  /** 本单绑定的直接上级 */
+  referrer: `0x${string}`;
+  /** 本单已释放给直接上级的 5% 奖励 */
+  directReferralReward: bigint;
+  /** 提前结算时追扣的直推奖励 */
+  directReferralRecovered: bigint;
+  /** 到期结算时转入 dead 的盈利税 */
+  profitTaxBurned: bigint;
+}
+
+/** 团队极差奖励类型 */
+export type TeamRewardType = 1 | 2 | 3 | 4;
+
+/** 团队极差奖励释放记录 */
+export interface TeamRewardGrant {
+  id: number;
+  recipient: `0x${string}`;
+  source: `0x${string}`;
+  sourcePositionId: number;
+  rewardType: TeamRewardType;
+  amount: bigint;
+  period: StakingPeriod;
+  startTime: number;
+  endTime: number;
+  claimed: bigint;
 }
 
 /** 质押操作参数 */
@@ -44,6 +69,4 @@ export interface StakeParams {
   amount: bigint;
   /** 质押天数 */
   period: StakingPeriod;
-  /** 推荐人地址 (可选) */
-  referrer?: `0x${string}`;
 }

@@ -1,17 +1,17 @@
 /**
  * @file hooks/staking/useUnstake.ts
- * @description 执行解除质押操作 Hook。
- *   封装质押合约的 unstake 方法，支持到期后解除质押。
+ * @description 执行订单结算 Hook。
+ *   封装 DApp 合约的 unstake 方法，支持提前结算或到期结算。
  */
 "use client";
 
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { STAKING_POOL_ABI } from "@/constants/abis/StakingPool";
-import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 
 /**
- * useUnstake — 解除质押
- * @returns 解除质押方法与交易状态
+ * useUnstake — 订单结算
+ * @returns 结算方法与交易状态
  */
 export function useUnstake() {
   const {
@@ -28,13 +28,13 @@ export function useUnstake() {
   } = useWaitForTransactionReceipt({ hash: txHash });
 
   /**
-   * 发起解除质押交易
+  * 发起订单结算交易
    * @param positionId - 质押持仓 ID
    */
   const unstake = (positionId: number) => {
     writeContract({
-      address: STAKING_CONTRACT_ADDRESS,
-      abi: STAKING_POOL_ABI,
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
       functionName: "unstake",
       args: [BigInt(positionId)],
     });

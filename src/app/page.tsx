@@ -1,12 +1,173 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
+import { useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { keccak256, parseUnits, toBytes } from "viem";
 import { HeroBanner } from "@/components/three/HeroBanner";
 import { StarBackground } from "@/components/three/StarBackground";
 import { Badge } from "@/components/ui/Badge";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
+import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import { ALL_TOKENS } from "@/constants/tokens";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { useDappTokenAddress } from "@/hooks/dapp/useDappTokenAddress";
+import { useTokenApproval } from "@/hooks/token/useTokenApproval";
+import { useWallet } from "@/hooks/common/useWallet";
+
+const PRODUCT_PACKAGES = [
+  { amount: 5000, label: "5000 产品包" },
+  { amount: 10000, label: "1W 产品包" },
+  { amount: 30000, label: "3W 产品包" },
+  { amount: 50000, label: "5W 产品包" },
+  { amount: 100000, label: "10W 产品包" },
+];
+
+type ProductPackage = (typeof PRODUCT_PACKAGES)[number];
+
+type PendingPackageOrder = {
+  walletAddress: `0x${string}`;
+  phone: string;
+  sn: string;
+  packageAmount: number;
+  orderRef: `0x${string}`;
+};
 
 export default function HomePage() {
+  const { address, isConnected, connectWallet } = useWallet();
+  const { shdTokenAddress } = useDappTokenAddress();
+  const [selectedPackage, setSelectedPackage] = useState<ProductPackage | null>(null);
+  const [phone, setPhone] = useState("");
+  const [sn, setSn] = useState("");
+  const [packageMsg, setPackageMsg] = useState<string | null>(null);
+  const [pendingOrder, setPendingOrder] = useState<PendingPackageOrder | null>(null);
+  const [callbackTxHash, setCallbackTxHash] = useState<`0x${string}` | null>(null);
+  const [approvalTarget, setApprovalTarget] = useState<bigint>(BigInt(0));
+  const [approvedAmount, setApprovedAmount] = useState<bigint>(BigInt(0));
+
+  const {
+    approve,
+    needsApproval,
+    isApproving,
+    isConfirming: isApproveConfirming,
+    isConfirmed: isApproveConfirmed,
+    refetchAllowance,
+  } = useTokenApproval(shdTokenAddress, DAPP_CONTRACT_ADDRESS);
+
+  const {
+    writeContract,
+    data: packageTxHash,
+    isPending: isPurchasePending,
+    reset: resetPurchase,
+  } = useWriteContract();
+
+  const { isLoading: isPurchaseConfirming, isSuccess: isPurchaseConfirmed } =
+    useWaitForTransactionReceipt({ hash: packageTxHash });
+
+  const selectedAmount = useMemo(
+    () => selectedPackage ? parseUnits(String(selectedPackage.amount), 18) : BigInt(0),
+    [selectedPackage]
+  );
+
+  const packageNeedsApproval =
+    selectedAmount > BigInt(0) && needsApproval(selectedAmount) && approvedAmount < selectedAmount;
+  const packageBusy = isApproving || isApproveConfirming || isPurchasePending || isPurchaseConfirming;
+
+  useEffect(() => {
+    if (!isApproveConfirmed || approvalTarget <= approvedAmount) return;
+    setApprovedAmount(approvalTarget);
+    void refetchAllowance();
+  }, [approvalTarget, approvedAmount, isApproveConfirmed, refetchAllowance]);
+
+  useEffect(() => {
+    if (!isPurchaseConfirmed || !packageTxHash || !pendingOrder || callbackTxHash === packageTxHash) return;
+
+    setCallbackTxHash(packageTxHash);
+    setPackageMsg("链上扣款成功，正在同步商城…");
+
+    void fetch("/api/mall/product-package", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...pendingOrder, txHash: packageTxHash }),
+    })
+      .then(async (response) => {
+        const result = await response.json().catch(() => null) as { message?: string; skipped?: boolean } | null;
+        if (response.ok && !result?.skipped) {
+          setPackageMsg("扣款成功，商城同步已提交");
+          return;
+        }
+        setPackageMsg(result?.message ?? "扣款成功，商城同步待确认");
+      })
+      .catch(() => setPackageMsg("扣款成功，商城同步请求失败"));
+  }, [callbackTxHash, isPurchaseConfirmed, packageTxHash, pendingOrder]);
+
+  const openPackageModal = (pkg: ProductPackage) => {
+    setSelectedPackage(pkg);
+    setPhone("");
+    setSn("");
+    setPackageMsg(null);
+    setPendingOrder(null);
+    setCallbackTxHash(null);
+    resetPurchase();
+  };
+
+  const handlePackagePurchase = () => {
+    if (!selectedPackage) return;
+    if (!isConnected) {
+      connectWallet();
+      return;
+    }
+    if (!address) {
+      setPackageMsg("请先连接钱包");
+      return;
+    }
+    if (!shdTokenAddress) {
+      setPackageMsg("正在读取 SHD 合约地址，请稍后再试");
+      return;
+    }
+
+    const nextPhone = phone.trim();
+    const nextSn = sn.trim();
+    if (!nextPhone) {
+      setPackageMsg("请输入手机号");
+      return;
+    }
+    if (!nextSn) {
+      setPackageMsg("请输入 SN 号");
+      return;
+    }
+
+    if (packageNeedsApproval) {
+      setPackageMsg(null);
+      setApprovalTarget(selectedAmount);
+      approve(String(selectedPackage.amount), 18);
+      return;
+    }
+
+    const orderRef = keccak256(
+      toBytes(`${address}:${nextPhone}:${nextSn}:${selectedPackage.amount}:${Date.now()}`)
+    );
+
+    setPackageMsg(null);
+    setCallbackTxHash(null);
+    setPendingOrder({
+      walletAddress: address,
+      phone: nextPhone,
+      sn: nextSn,
+      packageAmount: selectedPackage.amount,
+      orderRef,
+    });
+    resetPurchase();
+    writeContract({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "purchasePackage",
+      args: [selectedAmount, orderRef],
+    });
+  };
+
   return (
     <div className="relative overflow-x-hidden">
       <StarBackground />
@@ -78,16 +239,15 @@ export default function HomePage() {
             <AnimatedSection direction="up" delay={0.08}>
               <div className="rounded-2xl border border-card-border bg-white/5 p-4 sm:p-6">
                 <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-5 sm:gap-3">
-                  {[
-                    "5000 产品包",
-                    "1W 产品包",
-                    "3W 产品包",
-                    "5W 产品包",
-                    "10W 产品包",
-                  ].map((pkg) => (
-                    <div key={pkg} className="rounded-xl border border-cyber-blue/20 bg-cyber-blue/5 px-2 py-2 text-[10px] font-semibold text-cyber-blue sm:py-2.5 sm:text-xs">
-                      {pkg}
-                    </div>
+                  {PRODUCT_PACKAGES.map((pkg) => (
+                    <button
+                      key={pkg.amount}
+                      type="button"
+                      onClick={() => openPackageModal(pkg)}
+                      className="rounded-xl border border-cyber-blue/20 bg-cyber-blue/5 px-2 py-2 text-[10px] font-semibold text-cyber-blue transition-all hover:border-cyber-blue/45 hover:bg-cyber-blue/10 active:scale-[0.98] sm:py-2.5 sm:text-xs"
+                    >
+                      {pkg.label}
+                    </button>
                   ))}
                 </div>
 
@@ -122,6 +282,62 @@ export default function HomePage() {
           </section>
         </div>
       </div>
+
+      <Modal
+        open={!!selectedPackage}
+        onClose={() => {
+          if (!packageBusy) setSelectedPackage(null);
+        }}
+        title="SHD 报单产品包"
+      >
+        {selectedPackage && (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-card-border bg-white/[0.04] p-3">
+              <p className="text-xs text-text-muted">产品包</p>
+              <p className="mt-1 text-lg font-semibold text-cyber-blue">
+                {selectedPackage.label} / {selectedPackage.amount.toLocaleString()} SHD
+              </p>
+            </div>
+
+            <Input
+              label="手机号"
+              inputMode="tel"
+              placeholder="请输入手机号"
+              value={phone}
+              onChange={(event) => {
+                setPhone(event.target.value);
+                setPackageMsg(null);
+              }}
+            />
+            <Input
+              label="SN 号"
+              placeholder="请输入 SN 号"
+              value={sn}
+              onChange={(event) => {
+                setSn(event.target.value);
+                setPackageMsg(null);
+              }}
+            />
+
+            {packageMsg && <p className="text-xs text-text-secondary">{packageMsg}</p>}
+
+            <Button
+              className="w-full"
+              loading={packageBusy}
+              disabled={!selectedPackage || selectedAmount <= BigInt(0)}
+              onClick={handlePackagePurchase}
+            >
+              {!isConnected
+                ? "连接钱包"
+                : packageNeedsApproval
+                  ? "授权 SHD"
+                  : isPurchaseConfirmed
+                    ? "扣款成功"
+                    : "确认购买"}
+            </Button>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

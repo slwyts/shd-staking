@@ -6,11 +6,9 @@
 "use client";
 
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { STAKING_POOL_ABI } from "@/constants/abis/StakingPool";
-import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import type { StakeParams } from "@/types/staking";
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
 /**
  * useStake — 执行 SHD 质押
@@ -36,14 +34,10 @@ export function useStake() {
    */
   const stake = (params: StakeParams) => {
     writeContract({
-      address: STAKING_CONTRACT_ADDRESS,
-      abi: STAKING_POOL_ABI,
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
       functionName: "stake",
-      args: [
-        params.amount,
-        BigInt(params.period),
-        params.referrer ?? ZERO_ADDRESS,
-      ],
+      args: [params.amount, BigInt(params.period)],
     });
   };
 

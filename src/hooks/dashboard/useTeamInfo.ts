@@ -6,8 +6,8 @@
 "use client";
 
 import { useAccount, useReadContract } from "wagmi";
-import { STAKING_POOL_ABI } from "@/constants/abis/StakingPool";
-import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import type { TeamInfo, VLevel } from "@/types/team";
 
 /**
@@ -18,8 +18,8 @@ export function useTeamInfo() {
   const { address } = useAccount();
 
   const { data: rawTeam, isLoading, refetch } = useReadContract({
-    address: STAKING_CONTRACT_ADDRESS,
-    abi: STAKING_POOL_ABI,
+    address: DAPP_CONTRACT_ADDRESS,
+    abi: DAPP_ABI,
     functionName: "getTeamInfo",
     args: address ? [address] : undefined,
     query: {

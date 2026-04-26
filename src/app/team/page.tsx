@@ -34,7 +34,7 @@ export default function TeamPage() {
 
   const inviteLink =
     typeof window !== "undefined" && address
-      ? `${window.location.origin}/staking?ref=${address}`
+      ? `${window.location.origin}/dashboard?ref=${address}`
       : "";
 
   const handleCopy = useCallback(() => {

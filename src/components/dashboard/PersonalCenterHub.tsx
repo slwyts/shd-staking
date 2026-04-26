@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { isAddress } from "viem";
-import { useAccount } from "wagmi";
+import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
 import {
   Megaphone,
   Copy,
@@ -17,10 +17,25 @@ import {
 import { siteConfig } from "@/config/site";
 import { dorNetwork } from "@/config/chains";
 import { STORAGE_PREFERRED_REFERRER } from "@/constants/storageKeys";
-import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { formatAddress } from "@/utils/format";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Loading";
+
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
+
+function getInitialReferrerInput() {
+  if (typeof window === "undefined") return "";
+  try {
+    const urlRef = new URLSearchParams(window.location.search).get("ref");
+    if (urlRef && isAddress(urlRef)) return urlRef;
+    const savedReferrer = localStorage.getItem(STORAGE_PREFERRED_REFERRER);
+    return savedReferrer && isAddress(savedReferrer) ? savedReferrer : "";
+  } catch {
+    return "";
+  }
+}
 
 /** RobotX 风格圆角卡片 */
 export function PcCard({
@@ -131,21 +146,49 @@ export function HubAnnounceStrip() {
 
 export function HubReferralBindCard() {
   const { address } = useAccount();
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(getInitialReferrerInput);
   const [msg, setMsg] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
+  const { data: boundReferrerRaw, refetch: refetchBoundReferrer } = useReadContract({
+    address: DAPP_CONTRACT_ADDRESS,
+    abi: DAPP_ABI,
+    functionName: "referrerOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+  const boundReferrer = boundReferrerRaw as `0x${string}` | undefined;
+  const hasBoundReferrer = !!boundReferrer && boundReferrer !== ZERO_ADDRESS;
+  const {
+    writeContract: writeBindReferrer,
+    data: bindReferrerTxHash,
+    isPending: isBindReferrerPending,
+    reset: resetBindReferrer,
+  } = useWriteContract();
+  const { isLoading: isBindReferrerConfirming, isSuccess: isBindReferrerSuccess } =
+    useWaitForTransactionReceipt({ hash: bindReferrerTxHash });
 
   useEffect(() => {
+    if (!isBindReferrerSuccess) return;
+    void refetchBoundReferrer();
     try {
-      const s = localStorage.getItem(STORAGE_PREFERRED_REFERRER);
-      if (s) setInput(s);
+      localStorage.setItem(STORAGE_PREFERRED_REFERRER, input.trim());
     } catch {
       /* */
     }
-  }, []);
+  }, [input, isBindReferrerSuccess, refetchBoundReferrer]);
+
+  const bindMessage = isBindReferrerSuccess ? "链上绑定成功" : msg;
 
   const bind = useCallback(() => {
     const v = input.trim();
+    if (!address) {
+      setMsg("请先连接钱包");
+      return;
+    }
+    if (hasBoundReferrer) {
+      setMsg("当前地址已绑定上级");
+      return;
+    }
     if (!v) {
       setMsg("请输入上级地址");
       return;
@@ -154,17 +197,24 @@ export function HubReferralBindCard() {
       setMsg("地址格式不正确");
       return;
     }
-    try {
-      localStorage.setItem(STORAGE_PREFERRED_REFERRER, v);
-      setMsg("已绑定，认购时将默认使用该推荐地址");
-    } catch {
-      setMsg("保存失败，请检查浏览器存储权限");
+    if (v.toLowerCase() === address.toLowerCase()) {
+      setMsg("不能绑定自己的地址");
+      return;
     }
-  }, [input]);
+
+    setMsg(null);
+    resetBindReferrer();
+    writeBindReferrer({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "bindReferrer",
+      args: [v as `0x${string}`],
+    });
+  }, [address, hasBoundReferrer, input, resetBindReferrer, writeBindReferrer]);
 
   const copyInvite = useCallback(() => {
     if (!address) return;
-    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/staking?ref=${address}`;
+    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/dashboard?ref=${address}`;
     void navigator.clipboard.writeText(link).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
@@ -182,12 +232,24 @@ export function HubReferralBindCard() {
           setInput(e.target.value);
           setMsg(null);
         }}
+        disabled={hasBoundReferrer}
         className="mb-3 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/40"
       />
-      <Button type="button" className="mb-3 w-full" onClick={bind}>
-        绑定
+      {hasBoundReferrer && (
+        <p className="mb-3 break-all rounded-xl border border-accent-green/20 bg-accent-green/10 px-3 py-2 text-xs text-accent-green">
+          链上已绑定：{formatAddress(boundReferrer)}
+        </p>
+      )}
+      <Button
+        type="button"
+        className="mb-3 w-full"
+        loading={isBindReferrerPending || isBindReferrerConfirming}
+        disabled={hasBoundReferrer || !address}
+        onClick={bind}
+      >
+        {isBindReferrerConfirming ? "链上确认中…" : hasBoundReferrer ? "已绑定" : "链上绑定"}
       </Button>
-      {msg && <p className="mb-2 text-center text-xs text-text-secondary">{msg}</p>}
+      {bindMessage && <p className="mb-2 text-center text-xs text-text-secondary">{bindMessage}</p>}
       <button
         type="button"
         disabled={!address}
@@ -219,6 +281,8 @@ export function HubMyOrdersCard({
   loading: boolean;
   positions: PositionLite[];
 }) {
+  const [nowSec] = useState(() => Date.now() / 1000);
+
   return (
     <PcCard>
       <h3 className="mb-3 text-sm font-semibold text-text-primary">我的订单</h3>
@@ -229,7 +293,7 @@ export function HubMyOrdersCard({
       ) : (
         <ul className="space-y-2">
           {positions.slice(0, 4).map((pos) => {
-            const expired = Date.now() / 1000 > pos.endTime;
+            const expired = nowSec > pos.endTime;
             return (
               <li
                 key={String(pos.id)}
@@ -256,7 +320,7 @@ export function HubMyOrdersCard({
 
 export function HubQuickLinksCard() {
   const explorerBase = siteConfig.links.explorer.replace(/\/$/, "");
-  const contractUrl = `${explorerBase}/address/${STAKING_CONTRACT_ADDRESS}`;
+  const contractUrl = `${explorerBase}/address/${DAPP_CONTRACT_ADDRESS}`;
 
   const rows = [
     { href: siteConfig.links.chainWebsite, label: "官方网站", icon: Globe },

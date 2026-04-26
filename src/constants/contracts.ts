@@ -1,29 +1,21 @@
 /**
  * @file constants/contracts.ts
- * @description 合约地址常量。
- *   TODO: 合约部署后替换为真实地址。
+ * @description DApp 合约地址配置。前端只需要知道入口合约地址。
  */
+import { getAddress, isAddress } from "viem";
 
-/** SHD 代币合约地址 */
-export const SHD_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000001" as `0x${string}`;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-/** DHC 代币合约地址 */
-export const DHC_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000002" as `0x${string}`;
+function readRequiredAddress(name: string, value: string | undefined) {
+  if (!value || !isAddress(value) || getAddress(value) === ZERO_ADDRESS) {
+    throw new Error(`${name} must be set to a deployed contract address`);
+  }
 
-/** SCNY 代币合约地址 */
-export const SCNY_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000003" as `0x${string}`;
+  return getAddress(value) as `0x${string}`;
+}
 
-/** 质押合约地址 */
-export const STAKING_CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000004" as `0x${string}`;
-
-/** SWAP 路由合约地址 */
-export const SWAP_ROUTER_ADDRESS = "0x0000000000000000000000000000000000000005" as `0x${string}`;
-
-/** 后台订单簿合约地址（OrderBook.sol 部署后填写） */
-export const ORDER_BOOK_ADDRESS = "0xaC89210d75B7Cbe4fe03500E05E63F3daC3Ce690" as `0x${string}`;
-
-/** 项目方营销钱包地址 */
-export const MARKETING_WALLET = "0x0000000000000000000000000000000000000006" as `0x${string}`;
-
-/** 项目方回流底池钱包地址 */
-export const POOL_RETURN_WALLET = "0x0000000000000000000000000000000000000007" as `0x${string}`;
+/** DApp 入口合约地址（SHDStaking） */
+export const DAPP_CONTRACT_ADDRESS = readRequiredAddress(
+  "NEXT_PUBLIC_DAPP_ADDRESS",
+  process.env.NEXT_PUBLIC_DAPP_ADDRESS
+);

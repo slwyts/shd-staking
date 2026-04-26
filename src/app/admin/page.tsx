@@ -1,37 +1,70 @@
 /**
  * @file app/admin/page.tsx
- * @description Mini 版管理控制台 — 合约信息、拨币（用户地址 + SHD数量 + 锁仓天数）、查询用户订单。
+ * @description 管理控制台 — DApp 资金池管理与用户关系导入。
  */
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { parseEther, isAddress } from "viem";
-import { ORDER_BOOK_ABI } from "@/constants/abis/OrderBook";
-import { ORDER_BOOK_ADDRESS } from "@/constants/contracts";
-import {
-  ShieldCheck,
-  Info,
-  Copy,
-  Check,
-  Zap,
-  Search,
-  ChevronRight,
-} from "lucide-react";
-import { PageContainer } from "@/components/layout/PageContainer";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Skeleton } from "@/components/ui/Loading";
-import { SHD_TOKEN_ABI } from "@/constants/abis/SHDToken";
-import { SHD_TOKEN_ADDRESS, STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { useCallback, useEffect, useState } from "react";
+import { isAddress, parseEther } from "viem";
+import { useAccount, useReadContract, useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { DAPP_ABI, ERC20_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { dorNetwork } from "@/config/chains";
+import { useDappTokenAddress } from "@/hooks/dapp/useDappTokenAddress";
+import { useTokenApproval } from "@/hooks/token/useTokenApproval";
+import { PageContainer } from "@/components/layout/PageContainer";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { Skeleton } from "@/components/ui/Loading";
 import { formatTokenAmount } from "@/utils/format";
+import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
+  Check,
+  Copy,
+  Info,
+  ShieldCheck,
+  Upload,
+} from "lucide-react";
 
-const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
-function getOrderTypeLabel(orderType: number) {
-  return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "私募锁仓" : "未知类型";
+function parseOperationFlag(value: string) {
+  const normalized = value.trim().toLowerCase();
+  if (["true", "1", "yes", "y", "是"].includes(normalized)) return true;
+  if (["", "false", "0", "no", "n", "否"].includes(normalized)) return false;
+  return null;
+}
+
+function parseRelationImport(input: string) {
+  const users: `0x${string}`[] = [];
+  const referrers: `0x${string}`[] = [];
+  const levels: number[] = [];
+  const operationCenters: boolean[] = [];
+  const lines = input.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+
+  lines.forEach((line, index) => {
+    const cells = line.split(/[\s,，]+/).map((cell) => cell.trim()).filter(Boolean);
+    const [user, referrer = ZERO_ADDRESS, level = "0", operation = "false"] = cells;
+    if (!user || !isAddress(user)) throw new Error(`第 ${index + 1} 行用户地址格式不正确`);
+    if (!isAddress(referrer)) throw new Error(`第 ${index + 1} 行推荐人地址格式不正确`);
+
+    const parsedLevel = Number(level);
+    if (!Number.isInteger(parsedLevel) || parsedLevel < 0 || parsedLevel > 3) {
+      throw new Error(`第 ${index + 1} 行用户级别必须是 0-3`);
+    }
+
+    const parsedOperation = parseOperationFlag(operation);
+    if (parsedOperation === null) throw new Error(`第 ${index + 1} 行运营中心字段格式不正确`);
+
+    users.push(user as `0x${string}`);
+    referrers.push(referrer as `0x${string}`);
+    levels.push(parsedLevel);
+    operationCenters.push(parsedOperation);
+  });
+
+  return { users, referrers, levels, operationCenters };
 }
 
 function CopyAddressRow({ label, address }: { label: string; address: string }) {
@@ -62,67 +95,122 @@ function CopyAddressRow({ label, address }: { label: string; address: string }) 
 }
 
 export default function AdminPage() {
-  const { chainId } = useAccount();
-
-  // 延迟到客户端渲染链上状态，避免 SSR 水合不匹配
+  const { address, chainId } = useAccount();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
   const onChain = mounted && chainId === dorNetwork.id;
+  const { shdTokenAddress, isLoading: isShdAddressLoading } = useDappTokenAddress();
 
   const { data: poolBalanceRaw, isLoading: poolLoading } = useReadContract({
-    address: SHD_TOKEN_ADDRESS,
-    abi: SHD_TOKEN_ABI,
+    address: shdTokenAddress,
+    abi: ERC20_ABI,
     functionName: "balanceOf",
-    args: [STAKING_CONTRACT_ADDRESS],
+    args: [DAPP_CONTRACT_ADDRESS],
     query: {
-      enabled: onChain,
+      enabled: onChain && !!shdTokenAddress,
     },
   });
-
   const poolBalance = poolBalanceRaw as bigint | undefined;
 
-  // ── 添加订单表单──────────────────────────────────────
-  const [orderType,     setOrderType]     = useState(String(PRIVATE_PLACEMENT_ORDER_TYPE));
-  const [orderUser,     setOrderUser]     = useState("");
-  const [orderAmount,   setOrderAmount]   = useState("");
-  const [orderLockDays, setOrderLockDays] = useState("90");
-  const [addMsg,        setAddMsg]        = useState<string | null>(null);
+  const [fundAmount, setFundAmount] = useState("");
+  const [withdrawTo, setWithdrawTo] = useState("");
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [poolMsg, setPoolMsg] = useState<string | null>(null);
 
-  const { writeContract, data: addTxHash, isPending: isAddPending, reset: resetWrite } = useWriteContract();
-  const { isLoading: isAddConfirming, isSuccess: isAddSuccess } = useWaitForTransactionReceipt({ hash: addTxHash });
+  const {
+    approve: approveFund,
+    needsApproval: fundNeedsApproval,
+    isApproving: isFundApproving,
+    isConfirming: isFundApprovalConfirming,
+    isConfirmed: isFundApprovalConfirmed,
+    refetchAllowance: refetchFundAllowance,
+  } = useTokenApproval(shdTokenAddress, DAPP_CONTRACT_ADDRESS);
 
-  const orderTypeLabel = useMemo(() => getOrderTypeLabel(Number(orderType)), [orderType]);
+  const {
+    writeContract: writePoolContract,
+    data: poolTxHash,
+    isPending: isPoolPending,
+    reset: resetPoolWrite,
+  } = useWriteContract();
+  const { isLoading: isPoolConfirming, isSuccess: isPoolSuccess } =
+    useWaitForTransactionReceipt({ hash: poolTxHash });
 
-  const handleAddOrder = useCallback(() => {
-    setAddMsg(null);
-    if (!isAddress(orderUser))        { setAddMsg("用户地址格式不正确"); return; }
-    if (!orderAmount || isNaN(Number(orderAmount)) || Number(orderAmount) <= 0) { setAddMsg("请输入有效 SHD 数量"); return; }
-    if (!orderLockDays || Number(orderLockDays) <= 0) { setAddMsg("请输入有效锁仓天数"); return; }
-    resetWrite();
-    writeContract({
-      address: ORDER_BOOK_ADDRESS,
-      abi: ORDER_BOOK_ABI,
-      functionName: "addOrder",
-      args: [
-        orderUser as `0x${string}`,
-        Number(orderType),
-        parseEther(orderAmount),
-        BigInt(orderLockDays),
-      ],
+  useEffect(() => {
+    if (isFundApprovalConfirmed) void refetchFundAllowance();
+  }, [isFundApprovalConfirmed, refetchFundAllowance]);
+
+  const [relationInput, setRelationInput] = useState("");
+  const [relationMsg, setRelationMsg] = useState<string | null>(null);
+  const {
+    writeContract: writeRelationImport,
+    data: relationTxHash,
+    isPending: isRelationPending,
+    reset: resetRelationWrite,
+  } = useWriteContract();
+  const { isLoading: isRelationConfirming, isSuccess: isRelationSuccess } =
+    useWaitForTransactionReceipt({ hash: relationTxHash });
+
+  const handleImportRelations = useCallback(() => {
+    setRelationMsg(null);
+    let parsed: ReturnType<typeof parseRelationImport>;
+    try {
+      parsed = parseRelationImport(relationInput);
+    } catch (error) {
+      setRelationMsg(error instanceof Error ? error.message : "导入内容格式不正确");
+      return;
+    }
+
+    if (parsed.users.length === 0) {
+      setRelationMsg("请至少输入一行用户数据");
+      return;
+    }
+
+    resetRelationWrite();
+    writeRelationImport({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "batchImportUsers",
+      args: [parsed.users, parsed.referrers, parsed.levels, parsed.operationCenters],
     });
-  }, [orderType, orderUser, orderAmount, orderLockDays, writeContract, resetWrite]);
+  }, [relationInput, resetRelationWrite, writeRelationImport]);
 
-  // ── 查询用户订单（读合约）──────────────────────────────
-  const [queryUserAddr, setQueryUserAddr] = useState("");
-  const queryEnabled = isAddress(queryUserAddr);
-  const { data: queryOrders, isLoading: queryLoading } = useReadContract({
-    address: ORDER_BOOK_ADDRESS,
-    abi: ORDER_BOOK_ABI,
-    functionName: "getOrders",
-    args: queryEnabled ? [queryUserAddr as `0x${string}`] : undefined,
-    query: { enabled: queryEnabled },
-  });
+  const handleFundPool = useCallback(() => {
+    setPoolMsg(null);
+    if (!address) { setPoolMsg("请先连接钱包"); return; }
+    if (!shdTokenAddress) { setPoolMsg("正在读取 SHD 合约地址，请稍后再试"); return; }
+    if (!fundAmount || isNaN(Number(fundAmount)) || Number(fundAmount) <= 0) { setPoolMsg("请输入有效充币数量"); return; }
+
+    const amount = parseEther(fundAmount);
+    if (fundNeedsApproval(amount)) {
+      approveFund(fundAmount, 18);
+      setPoolMsg("授权确认后，再次点击充入资金池");
+      return;
+    }
+
+    resetPoolWrite();
+    writePoolContract({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "fundRewards",
+      args: [amount],
+    });
+  }, [address, approveFund, fundAmount, fundNeedsApproval, resetPoolWrite, shdTokenAddress, writePoolContract]);
+
+  const handleWithdrawPool = useCallback(() => {
+    setPoolMsg(null);
+    const recipient = (withdrawTo.trim() || address) as `0x${string}` | undefined;
+    if (!recipient || !isAddress(recipient)) { setPoolMsg("提币地址格式不正确"); return; }
+    if (!withdrawAmount || isNaN(Number(withdrawAmount)) || Number(withdrawAmount) <= 0) { setPoolMsg("请输入有效提币数量"); return; }
+
+    resetPoolWrite();
+    writePoolContract({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "recoverExcessToken",
+      args: [recipient, parseEther(withdrawAmount)],
+    });
+  }, [address, resetPoolWrite, withdrawAmount, withdrawTo, writePoolContract]);
 
   return (
     <PageContainer>
@@ -133,7 +221,7 @@ export default function AdminPage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-cyber-blue sm:text-xl">管理控制台</h1>
-            <p className="text-[10px] text-text-muted sm:text-xs">拨币 &amp; 锁仓管理</p>
+            <p className="text-[10px] text-text-muted sm:text-xs">资金池 &amp; 用户关系管理</p>
           </div>
         </div>
         <Link href="/dashboard">
@@ -143,7 +231,6 @@ export default function AdminPage() {
         </Link>
       </div>
 
-      {/* 合约信息 */}
       <section className="mb-5 animate-slide-up opacity-0 sm:mb-6" style={{ animationDelay: "0.05s", animationFillMode: "forwards" }}>
         <Card className="border-cyber-blue/20 shadow-[0_0_24px_rgba(59,130,246,0.06)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-medium text-cyber-blue sm:text-base">
@@ -151,13 +238,19 @@ export default function AdminPage() {
             合约信息
           </div>
           <div className="space-y-3">
-            <CopyAddressRow label="订单簿合约地址" address={ORDER_BOOK_ADDRESS} />
-            <CopyAddressRow label="SHD 代币地址" address={SHD_TOKEN_ADDRESS} />
+            <CopyAddressRow label="DApp 合约地址" address={DAPP_CONTRACT_ADDRESS} />
+            {isShdAddressLoading ? (
+              <Skeleton className="h-20 w-full" />
+            ) : shdTokenAddress ? (
+              <CopyAddressRow label="SHD 代币地址（DApp 读取）" address={shdTokenAddress} />
+            ) : (
+              <div className="rounded-lg bg-white/[0.04] p-3 text-xs text-text-muted sm:p-4">暂未读取到 SHD 代币地址</div>
+            )}
             <div className="rounded-lg bg-white/[0.04] p-3 sm:p-4">
               <p className="mb-1 text-[10px] text-text-muted sm:text-xs">合约池余额（SHD）</p>
               {!onChain ? (
                 <p className="text-xs text-text-muted">请连接钱包并切换至 {dorNetwork.name} 后查询</p>
-              ) : poolLoading ? (
+              ) : poolLoading || isShdAddressLoading ? (
                 <Skeleton className="h-7 w-40" />
               ) : (
                 <p className="font-mono text-lg font-semibold text-accent-green sm:text-xl">
@@ -169,131 +262,105 @@ export default function AdminPage() {
         </Card>
       </section>
 
-      {/* 添加订单 */}
-      <section className="mb-5 animate-slide-up opacity-0 sm:mb-6" style={{ animationDelay: "0.12s", animationFillMode: "forwards" }}>
-        <Card className="border-amber-orange/25 shadow-[0_0_28px_rgba(245,158,11,0.08)]">
+      <section className="mb-5 animate-slide-up opacity-0 sm:mb-6" style={{ animationDelay: "0.09s", animationFillMode: "forwards" }}>
+        <Card className="border-accent-green/25 shadow-[0_0_28px_rgba(16,185,129,0.08)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
-            <Zap className="h-4 w-4 text-amber-orange sm:h-5 sm:w-5" />
-            拨币锁仓（链上写入）
+            <ArrowDownToLine className="h-4 w-4 text-accent-green sm:h-5 sm:w-5" />
+            资金池管理
           </div>
-          <div className="space-y-3">
-            <div>
-              <p className="mb-1.5 text-xs text-text-secondary">订单类型</p>
-              <select
-                value={orderType}
-                onChange={(e) => setOrderType(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-card-bg px-3 py-2.5 text-sm text-text-primary outline-none focus:border-cyber-blue/50"
-              >
-                <option value="0">私募锁仓</option>
-              </select>
-            </div>
-            <div>
-              <p className="mb-1.5 text-xs text-text-secondary">用户地址</p>
-              <input
-                type="text"
-                placeholder="0x..."
-                value={orderUser}
-                onChange={(e) => setOrderUser(e.target.value)}
-                className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
-              />
-            </div>
-            <div>
-              <p className="mb-1.5 text-xs text-text-secondary">SHD 数量</p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3 rounded-lg bg-white/[0.04] p-3 sm:p-4">
+              <div className="flex items-center gap-2 text-xs font-medium text-accent-green sm:text-sm">
+                <ArrowDownToLine className="h-4 w-4" />
+                充入收益资金
+              </div>
               <input
                 type="text"
                 placeholder="10000"
-                value={orderAmount}
-                onChange={(e) => setOrderAmount(e.target.value)}
+                value={fundAmount}
+                onChange={(event) => {
+                  setFundAmount(event.target.value);
+                  setPoolMsg(null);
+                }}
                 className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
               />
+              <Button
+                className="w-full"
+                loading={isFundApproving || isFundApprovalConfirming || isPoolPending || isPoolConfirming}
+                onClick={handleFundPool}
+              >
+                {isFundApproving ? "等待授权签名..." : isFundApprovalConfirming ? "授权确认中..." : "充入资金池"}
+              </Button>
             </div>
-            <div>
-              <p className="mb-1.5 text-xs text-text-secondary">锁仓天数</p>
+            <div className="space-y-3 rounded-lg bg-white/[0.04] p-3 sm:p-4">
+              <div className="flex items-center gap-2 text-xs font-medium text-amber-orange sm:text-sm">
+                <ArrowUpFromLine className="h-4 w-4" />
+                提取未锁定余额
+              </div>
               <input
                 type="text"
-                placeholder="90"
-                value={orderLockDays}
-                onChange={(e) => setOrderLockDays(e.target.value)}
+                placeholder={address ?? "0x..."}
+                value={withdrawTo}
+                onChange={(event) => {
+                  setWithdrawTo(event.target.value);
+                  setPoolMsg(null);
+                }}
                 className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
               />
+              <input
+                type="text"
+                placeholder="10000"
+                value={withdrawAmount}
+                onChange={(event) => {
+                  setWithdrawAmount(event.target.value);
+                  setPoolMsg(null);
+                }}
+                className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
+              />
+              <Button
+                variant="secondary"
+                className="w-full"
+                loading={isPoolPending || isPoolConfirming}
+                onClick={handleWithdrawPool}
+              >
+                提取 SHD
+              </Button>
             </div>
-
-            {parseFloat(orderAmount) > 0 && Number(orderLockDays) > 0 && (
-              <div className="rounded-lg bg-white/[0.04] p-3">
-                <p className="mb-2 text-[10px] font-medium text-text-muted sm:text-xs">订单预览</p>
-                <div className="grid grid-cols-2 gap-y-1 text-xs text-text-secondary">
-                  <span>类型：<span className="text-cyber-blue">{orderTypeLabel}</span></span>
-                  <span>释放方式：<span className="text-accent-green">到期一次性释放</span></span>
-                </div>
-              </div>
-            )}
-
-            {addMsg && <p className="text-xs text-error">{addMsg}</p>}
-            {isAddSuccess && <p className="text-xs text-accent-green">✓ 订单已上链</p>}
-            <Button
-              className="w-full"
-              loading={isAddPending || isAddConfirming}
-              onClick={handleAddOrder}
-            >
-              {isAddPending ? "等待签名…" : isAddConfirming ? "确认中…" : "提交订单"}
-            </Button>
           </div>
+          {poolMsg && <p className="mt-3 text-xs text-amber-orange">{poolMsg}</p>}
+          {isPoolSuccess && <p className="mt-3 text-xs text-accent-green">资金池交易已确认</p>}
         </Card>
       </section>
 
-      {/* 查询用户订单 */}
-      <section className="mb-8 animate-slide-up opacity-0 sm:mb-10" style={{ animationDelay: "0.19s", animationFillMode: "forwards" }}>
-        <Card className="border-cyber-blue/30 shadow-[0_0_24px_rgba(59,130,246,0.1)]">
+      <section className="mb-8 animate-slide-up opacity-0 sm:mb-10" style={{ animationDelay: "0.16s", animationFillMode: "forwards" }}>
+        <Card className="border-cyber-blue/25 shadow-[0_0_28px_rgba(59,130,246,0.08)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
-            <Search className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />
-            查询用户订单
+            <Upload className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />
+            用户关系导入（链上写入）
           </div>
-          <input
-            type="text"
-            placeholder="输入用户地址 0x..."
-            value={queryUserAddr}
-            onChange={(e) => setQueryUserAddr(e.target.value)}
-            className="w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 text-sm text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
-          />
-          {queryEnabled && (
-            <div className="mt-4 space-y-2">
-              {queryLoading ? (
-                <p className="text-center text-xs text-text-muted">查询中…</p>
-              ) : !queryOrders || (queryOrders as readonly unknown[]).length === 0 ? (
-                <p className="text-center text-xs text-text-muted">该用户暂无订单</p>
-              ) : (
-                (queryOrders as ReadonlyArray<{
-                  id: bigint; orderType: number; amount: bigint; lockDays: bigint; createdAt: bigint;
-                }>).map((o) => {
-                  const amount = Number(o.amount) / 1e18;
-                  const lockDays = Number(o.lockDays);
-                  const createdSec = Number(o.createdAt);
-                  const expirySec = createdSec + lockDays * 86400;
-                  const nowSec = Date.now() / 1000;
-                  const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
-                  const expired = nowSec >= expirySec;
-                  return (
-                    <div key={Number(o.id)} className="rounded-lg border border-card-border bg-white/[0.03] p-3 text-xs">
-                      <div className="mb-1 flex justify-between">
-                        <span className="font-medium text-text-primary">#{Number(o.id)}</span>
-                        <span className={expired ? "text-accent-green" : "text-amber-orange"}>
-                          {expired ? "已到期" : "锁仓中"}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-y-1 text-text-muted">
-                        <span>类型：<span className="text-cyber-blue">{getOrderTypeLabel(Number(o.orderType))}</span></span>
-                        <span>数量：<span className="text-text-primary">{amount.toLocaleString()} SHD</span></span>
-                        <span>锁仓：<span className="text-text-primary">{lockDays} 天</span></span>
-                        <span>剩余：<span className="text-text-primary">{expired ? "已到期" : `${remainDays} 天`}</span></span>
-                        <span>创建：<span className="text-text-primary">{new Date(createdSec * 1000).toLocaleDateString("zh-CN")}</span></span>
-                        <span>释放：<span className="text-accent-green">到期一次性释放</span></span>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
+          <div className="space-y-3">
+            <div className="rounded-lg bg-white/[0.04] p-3 text-[10px] leading-relaxed text-text-muted sm:text-xs">
+              每行格式：用户地址,推荐人地址,级别,是否运营中心。级别 0=普通，1=区县，2=市，3=省；运营中心可填 true/false 或 1/0。
             </div>
-          )}
+            <textarea
+              value={relationInput}
+              onChange={(event) => {
+                setRelationInput(event.target.value);
+                setRelationMsg(null);
+              }}
+              placeholder={`0xUser,0xReferrer,1,true\n0xUser2,${ZERO_ADDRESS},0,false`}
+              className="min-h-36 w-full rounded-lg border border-card-border bg-white/5 px-3 py-2.5 font-mono text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50"
+            />
+            {relationMsg && <p className="text-xs text-error">{relationMsg}</p>}
+            {isRelationSuccess && <p className="text-xs text-accent-green">用户关系已导入</p>}
+            <Button
+              className="w-full"
+              loading={isRelationPending || isRelationConfirming}
+              onClick={handleImportRelations}
+            >
+              {isRelationPending ? "等待签名..." : isRelationConfirming ? "确认中..." : "导入关系"}
+            </Button>
+          </div>
         </Card>
       </section>
     </PageContainer>

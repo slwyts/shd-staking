@@ -1,14 +1,21 @@
 {
   "name": "shd-staking",
   "version": "0.1.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "dev:testnet": "node scripts/dev-testnet.mjs",
+    "build": "pnpm compile && next build",
+    "compile": "hardhat compile && pnpm sync:abi",
+    "sync:abi": "node scripts/sync-abis.mjs",
+    "deploy:prod": "node scripts/deploy-prod.mjs",
+    "time": "node scripts/time.mjs",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
@@ -29,6 +36,7 @@
     "@types/three": "^0.183.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.2",
+    "hardhat": "^3.4.1",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

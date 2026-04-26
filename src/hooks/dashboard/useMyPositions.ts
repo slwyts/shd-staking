@@ -6,8 +6,8 @@
 "use client";
 
 import { useAccount, useReadContract } from "wagmi";
-import { STAKING_POOL_ABI } from "@/constants/abis/StakingPool";
-import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import type { StakingPosition, StakingPeriod } from "@/types/staking";
 
 /**
@@ -18,8 +18,8 @@ export function useMyPositions() {
   const { address } = useAccount();
 
   const { data: rawPositions, isLoading, refetch } = useReadContract({
-    address: STAKING_CONTRACT_ADDRESS,
-    abi: STAKING_POOL_ABI,
+    address: DAPP_CONTRACT_ADDRESS,
+    abi: DAPP_ABI,
     functionName: "getUserPositions",
     args: address ? [address] : undefined,
     query: {
@@ -37,6 +37,10 @@ export function useMyPositions() {
         endTime: bigint;
         claimedReward: bigint;
         isUnstaked: boolean;
+        referrer: `0x${string}`;
+        directReferralReward: bigint;
+        directReferralRecovered: bigint;
+        profitTaxBurned: bigint;
       }>).map((p) => ({
         id: Number(p.id),
         amount: p.amount,
@@ -46,6 +50,10 @@ export function useMyPositions() {
         claimedReward: p.claimedReward,
         pendingReward: BigInt(0),
         isUnstaked: p.isUnstaked,
+        referrer: p.referrer,
+        directReferralReward: p.directReferralReward,
+        directReferralRecovered: p.directReferralRecovered,
+        profitTaxBurned: p.profitTaxBurned,
       }))
     : [];
 

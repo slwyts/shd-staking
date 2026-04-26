@@ -7,9 +7,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { isAddress } from "viem";
-import { useAccount, useConnect, useDisconnect, useSwitchChain, useReadContract } from "wagmi";
-import { ORDER_BOOK_ABI } from "@/constants/abis/OrderBook";
-import { ORDER_BOOK_ADDRESS } from "@/constants/contracts";
+import { useAccount, useConnect, useDisconnect, useSwitchChain, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { DAPP_ABI } from "@/constants/abis/generated";
+import { DAPP_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { AnimatedSection } from "@/components/ui/AnimatedSection";
 import {
   Megaphone,
@@ -32,26 +32,23 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Loading";
 import { useMyPositions } from "@/hooks/dashboard/useMyPositions";
-import { STAKING_CONTRACT_ADDRESS } from "@/constants/contracts";
 import { STORAGE_PREFERRED_REFERRER } from "@/constants/storageKeys";
-import { formatAddress } from "@/utils/format";
+import { formatAddress, formatTokenAmount } from "@/utils/format";
 import { dorNetwork } from "@/config/chains";
 import { siteConfig } from "@/config/site";
 
-const PRIVATE_PLACEMENT_ORDER_TYPE = 0;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
-/**
- * 前端隐藏的撤销订单（合约无删除能力，临时前端屏蔽）。
- * key = 用户地址(小写), value = 需隐藏的订单 id 集合。
- */
-const HIDDEN_ORDERS: Record<string, Set<number>> = {
-  "0x88110713b8d3cde7f20699806c443cad0f6027d6": new Set([2]), // 撤销6万-填错账号
-  "0xefadd786d55ad1904a3684d7080598ed4f650403": new Set([3]), // 撤销6千-重复一笔
-  "0xb175f3d162e2712e654bf31232b92191eef06e67": new Set([1]), // 撤销5千-多拨
-};
-
-function getOrderTypeLabel(orderType: number) {
-  return orderType === PRIVATE_PLACEMENT_ORDER_TYPE ? "认购锁仓" : "未知类型";
+function getInitialReferrerInput() {
+  if (typeof window === "undefined") return "";
+  try {
+    const urlRef = new URLSearchParams(window.location.search).get("ref");
+    if (urlRef && isAddress(urlRef)) return urlRef;
+    const savedReferrer = localStorage.getItem(STORAGE_PREFERRED_REFERRER);
+    return savedReferrer && isAddress(savedReferrer) ? savedReferrer : "";
+  } catch {
+    return "";
+  }
 }
 
 export default function DashboardPage() {
@@ -60,55 +57,70 @@ export default function DashboardPage() {
   const { disconnect, isPending: isDisconnecting } = useDisconnect();
   const { switchChain, isPending: isSwitching } = useSwitchChain();
   const wrongChain = isConnected && !!address && chainId != null && chainId !== dorNetwork.id;
+  const { positions, isLoading: positionsLoading } = useMyPositions();
 
-  // 读取用户的 OrderBook 订单（Mini 版：id, orderType, amount, lockDays, createdAt）
-  const { data: myOrders, isLoading: ordersLoading } = useReadContract({
-    address: ORDER_BOOK_ADDRESS,
-    abi: ORDER_BOOK_ABI,
-    functionName: "getOrders",
+  const { data: boundReferrerRaw, refetch: refetchBoundReferrer } = useReadContract({
+    address: DAPP_CONTRACT_ADDRESS,
+    abi: DAPP_ABI,
+    functionName: "referrerOf",
     args: address ? [address] : undefined,
     query: { enabled: !!address },
   });
-  type ChainOrder = {
-    id: bigint; orderType: bigint; amount: bigint; lockDays: bigint; createdAt: bigint;
-  };
-  const allOrders = (myOrders as ChainOrder[] | undefined) ?? [];
-  const hiddenSet = address ? HIDDEN_ORDERS[address.toLowerCase()] : undefined;
-  const orders = hiddenSet ? allOrders.filter((o) => !hiddenSet.has(Number(o.id))) : allOrders;
+  const boundReferrer = boundReferrerRaw as `0x${string}` | undefined;
+  const hasBoundReferrer = !!boundReferrer && boundReferrer !== ZERO_ADDRESS;
+
+  const {
+    writeContract: writeBindReferrer,
+    data: bindReferrerTxHash,
+    isPending: isBindReferrerPending,
+    reset: resetBindReferrer,
+  } = useWriteContract();
+  const { isLoading: isBindReferrerConfirming, isSuccess: isBindReferrerSuccess } =
+    useWaitForTransactionReceipt({ hash: bindReferrerTxHash });
 
   // 每分钟刷新一次「当前时间」，驱动进度条更新
-  const [nowMs, setNowMs] = useState(0);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
-    setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  const [refInput, setRefInput] = useState("");
+  const [refInput, setRefInput] = useState(getInitialReferrerInput);
   const [refMsg, setRefMsg] = useState<string | null>(null);
   const [inviteCopied, setInviteCopied] = useState(false);
   const [addrCopied, setAddrCopied] = useState(false);
 
   useEffect(() => {
+    if (!isBindReferrerSuccess) return;
+    void refetchBoundReferrer();
     try {
-      const s = localStorage.getItem(STORAGE_PREFERRED_REFERRER);
-      if (s) setRefInput(s);
+      localStorage.setItem(STORAGE_PREFERRED_REFERRER, refInput.trim());
     } catch { /* */ }
-  }, []);
+  }, [isBindReferrerSuccess, refInput, refetchBoundReferrer]);
+
+  const bindRefMessage = isBindReferrerSuccess ? "链上绑定成功" : refMsg;
 
   const bindRef = useCallback(() => {
     const v = refInput.trim();
+    if (!address) { setRefMsg("请先连接钱包"); return; }
+    if (hasBoundReferrer) { setRefMsg("当前地址已绑定上级"); return; }
     if (!v) { setRefMsg("请输入上级地址"); return; }
     if (!isAddress(v)) { setRefMsg("地址格式不正确"); return; }
-    try {
-      localStorage.setItem(STORAGE_PREFERRED_REFERRER, v);
-      setRefMsg("已绑定，认购时将默认使用该推荐地址");
-    } catch { setRefMsg("保存失败"); }
-  }, [refInput]);
+    if (v.toLowerCase() === address.toLowerCase()) { setRefMsg("不能绑定自己的地址"); return; }
+
+    setRefMsg(null);
+    resetBindReferrer();
+    writeBindReferrer({
+      address: DAPP_CONTRACT_ADDRESS,
+      abi: DAPP_ABI,
+      functionName: "bindReferrer",
+      args: [v as `0x${string}`],
+    });
+  }, [address, hasBoundReferrer, refInput, resetBindReferrer, writeBindReferrer]);
 
   const copyInvite = useCallback(() => {
     if (!address) return;
-    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/staking?ref=${address}`;
+    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/dashboard?ref=${address}`;
     void navigator.clipboard.writeText(link).then(() => {
       setInviteCopied(true);
       setTimeout(() => setInviteCopied(false), 2000);
@@ -160,10 +172,23 @@ export default function DashboardPage() {
             placeholder="输入上级地址 0x..."
             value={refInput}
             onChange={(e) => { setRefInput(e.target.value); setRefMsg(null); }}
+            disabled={hasBoundReferrer}
             className="mb-3 w-full rounded-lg border border-card-border bg-white/5 px-3 py-2 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-cyber-blue/50 sm:mb-4 sm:py-2.5 sm:text-sm"
           />
-          <Button className="mb-2.5 w-full sm:mb-3" onClick={bindRef}>绑定</Button>
-          {refMsg && <p className="mb-2.5 text-center text-[10px] text-text-secondary sm:mb-3 sm:text-xs">{refMsg}</p>}
+          {hasBoundReferrer && (
+            <p className="mb-2.5 break-all rounded-lg border border-accent-green/20 bg-accent-green/10 px-3 py-2 text-[10px] text-accent-green sm:mb-3 sm:text-xs">
+              链上已绑定：{formatAddress(boundReferrer)}
+            </p>
+          )}
+          <Button
+            className="mb-2.5 w-full sm:mb-3"
+            loading={isBindReferrerPending || isBindReferrerConfirming}
+            disabled={hasBoundReferrer || !address}
+            onClick={bindRef}
+          >
+            {isBindReferrerConfirming ? "链上确认中…" : hasBoundReferrer ? "已绑定" : "链上绑定"}
+          </Button>
+          {bindRefMessage && <p className="mb-2.5 text-center text-[10px] text-text-secondary sm:mb-3 sm:text-xs">{bindRefMessage}</p>}
           <Button
             variant="secondary"
             className="w-full gap-2"
@@ -186,39 +211,36 @@ export default function DashboardPage() {
         </h2>
         {!isConnected || !address ? (
           <Card><p className="py-2 text-center text-xs text-text-muted">请先连接钱包</p></Card>
-        ) : ordersLoading ? (
+        ) : positionsLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-28 w-full" />
             <Skeleton className="h-28 w-full" />
           </div>
-        ) : orders.length === 0 ? (
+        ) : positions.length === 0 ? (
           <Card><p className="py-4 text-center text-xs text-text-muted">暂无订单记录</p></Card>
         ) : (
           <div className="space-y-3">
-            {orders.map((o) => {
-              const amount = Number(o.amount) / 1e18;
-              const lockDays = Number(o.lockDays);
-              const createdSec = Number(o.createdAt);
-              const expirySec = createdSec + lockDays * 86400;
+            {positions.map((position) => {
+              const createdSec = position.startTime;
+              const expirySec = position.endTime;
               const nowSec = nowMs / 1000;
               const remainDays = Math.max(0, Math.ceil((expirySec - nowSec) / 86400));
-              const expired = nowSec >= expirySec;
-              // 进度条
-              const durationSec = lockDays * 86400;
+              const expired = position.isUnstaked || nowSec >= expirySec;
+              const durationSec = Math.max(1, expirySec - createdSec);
               const timeProgress = durationSec > 0
                 ? Math.min(100, Math.max(0, Math.round(((nowSec - createdSec) / durationSec) * 100)))
                 : 0;
-              const statusLabel = expired ? "已到期" : "锁仓中";
+              const statusLabel = position.isUnstaked ? "已结算" : expired ? "已到期" : "锁仓中";
               const statusColor = expired ? "bg-accent-green/20 text-accent-green" : "bg-amber-orange/20 text-amber-orange";
               const expiryDate = expirySec > 0 ? new Date(expirySec * 1000).toLocaleDateString("zh-CN") : "—";
               return (
-                <Card key={Number(o.id)} className="border-card-border">
+                <Card key={position.id} className="border-card-border">
                   {/* 头部: 编号 + 状态 */}
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-text-primary">#{Number(o.id)}</span>
+                      <span className="font-bold text-text-primary">#{position.id}</span>
                       <span className="rounded-md bg-cyber-blue/15 px-2 py-0.5 text-[10px] font-medium text-cyber-blue sm:text-xs">
-                        {getOrderTypeLabel(Number(o.orderType))}
+                        SHD 认购
                       </span>
                     </div>
                     <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium sm:text-xs ${statusColor}`}>{statusLabel}</span>
@@ -227,11 +249,11 @@ export default function DashboardPage() {
                   <div className="mb-3 grid grid-cols-2 gap-y-2 text-xs sm:text-sm">
                     <div>
                       <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">SHD 数量</p>
-                      <p className="font-semibold text-text-primary">{amount.toLocaleString()} SHD</p>
+                      <p className="font-semibold text-text-primary">{formatTokenAmount(position.amount, 18, 2)} SHD</p>
                     </div>
                     <div className="text-right">
                       <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">锁仓天数</p>
-                      <p className="font-semibold text-text-primary">{lockDays} 天</p>
+                      <p className="font-semibold text-text-primary">{position.period} 天</p>
                     </div>
                     <div>
                       <p className="mb-0.5 text-[10px] text-text-muted sm:text-xs">剩余天数</p>
@@ -249,7 +271,7 @@ export default function DashboardPage() {
                     </div>
                     <div className="mt-1 flex justify-between text-[10px] text-text-muted">
                       <span>进度 {timeProgress}%</span>
-                      <span>{expired ? "已到期" : `剩余 ${remainDays} 天`}</span>
+                      <span>{expired ? statusLabel : `剩余 ${remainDays} 天`}</span>
                     </div>
                   </div>
                 </Card>
@@ -394,7 +416,7 @@ export default function DashboardPage() {
             </Card>
           </a>
           <a
-            href={`${siteConfig.links.explorer.replace(/\/$/, "")}/address/${STAKING_CONTRACT_ADDRESS}`}
+            href={`${siteConfig.links.explorer.replace(/\/$/, "")}/address/${DAPP_CONTRACT_ADDRESS}`}
             target="_blank"
             rel="noopener noreferrer"
             className="group"
