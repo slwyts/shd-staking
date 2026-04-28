@@ -14,8 +14,6 @@ export interface StakingPool {
   dailyRate: number;
   /** 当前池总质押量 */
   totalStaked: bigint;
-  /** 是否开放 */
-  isActive: boolean;
 }
 
 /** 用户质押持仓 */
@@ -26,6 +24,8 @@ export interface StakingPosition {
   amount: bigint;
   /** 质押天数 */
   period: StakingPeriod;
+  /** 下单时锁定的日化收益率 (%) */
+  dailyRate: number;
   /** 质押开始时间 (Unix 秒) */
   startTime: number;
   /** 质押结束时间 (Unix 秒) */

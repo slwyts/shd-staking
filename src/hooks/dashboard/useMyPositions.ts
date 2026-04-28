@@ -33,6 +33,7 @@ export function useMyPositions() {
         id: bigint;
         amount: bigint;
         period: bigint;
+        dailyRate: bigint;
         startTime: bigint;
         endTime: bigint;
         claimedReward: bigint;
@@ -45,6 +46,7 @@ export function useMyPositions() {
         id: Number(p.id),
         amount: p.amount,
         period: Number(p.period) as StakingPeriod,
+        dailyRate: Number(p.dailyRate) / 100,
         startTime: Number(p.startTime),
         endTime: Number(p.endTime),
         claimedReward: p.claimedReward,

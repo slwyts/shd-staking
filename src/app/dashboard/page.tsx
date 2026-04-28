@@ -25,6 +25,7 @@ import {
   LogOut,
   Plug,
   ChevronRight,
+  ShieldCheck,
 } from "lucide-react";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Card } from "@/components/ui/Card";
@@ -82,6 +83,10 @@ function PositionCard({
   const statusColor = expired ? "bg-accent-green/20 text-accent-green" : "bg-amber-orange/20 text-amber-orange";
   const expiryDate = expirySec > 0 ? new Date(expirySec * 1000).toLocaleDateString("zh-CN") : "—";
   const settlementBusy = isSettling || isConfirming;
+  const dailyRateBps = BigInt(Math.round(position.dailyRate * 100));
+  const estimatedGrossReward = (position.amount * dailyRateBps * BigInt(position.period)) / BigInt(10_000);
+  const estimatedUserReward = estimatedGrossReward / BigInt(2);
+  const displayedStaticReward = expired ? pendingReward ?? BigInt(0) : estimatedUserReward;
 
   return (
     <Card className="border-card-border">
@@ -128,8 +133,8 @@ function PositionCard({
         <div className="space-y-2 border-t border-card-border pt-3">
           <div className="grid grid-cols-2 gap-2 text-[10px] sm:text-xs">
             <div className="rounded-lg bg-white/[0.04] px-2.5 py-2">
-              <p className="text-text-muted">可得静态收益</p>
-              <p className="mt-0.5 font-semibold text-accent-green">{formatTokenAmount(pendingReward ?? BigInt(0), 18, 4)} SHD</p>
+              <p className="text-text-muted">预计可得静态收益</p>
+              <p className="mt-0.5 font-semibold text-accent-green">{formatTokenAmount(displayedStaticReward, 18, 4)} SHD</p>
             </div>
             <div className="rounded-lg bg-white/[0.04] px-2.5 py-2">
               <p className="text-text-muted">预计到账</p>
@@ -213,7 +218,9 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!hydrated || refInput) return;
     const urlRef = new URLSearchParams(window.location.search).get("ref");
-    if (urlRef && isAddress(urlRef)) setRefInput(urlRef);
+    if (!urlRef || !isAddress(urlRef)) return;
+    const timer = window.setTimeout(() => setRefInput(urlRef), 0);
+    return () => window.clearTimeout(timer);
   }, [hydrated, refInput]);
 
   useEffect(() => {
@@ -523,6 +530,15 @@ export default function DashboardPage() {
           <ExternalLink className="h-4 w-4 text-cyber-blue sm:h-5 sm:w-5" />快捷链接
         </h2>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 sm:gap-4">
+          {isContractOwner && (
+            <Link href="/admin" className="group">
+              <Card hover className="flex items-center gap-2.5 sm:gap-3">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-accent-green sm:h-5 sm:w-5" strokeWidth={1.5} />
+                <span className="flex-1 text-xs text-text-primary group-hover:text-accent-green sm:text-sm">管理控制台</span>
+                <ChevronRight className="h-3.5 w-3.5 text-text-muted opacity-0 transition-opacity group-hover:opacity-100 sm:h-4 sm:w-4" />
+              </Card>
+            </Link>
+          )}
           <a
             href={siteConfig.links.chainWebsite}
             target="_blank"

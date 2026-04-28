@@ -8,6 +8,8 @@
     "dev:testnet": "node scripts/dev-testnet.mjs",
     "build": "pnpm compile && next build",
     "compile": "hardhat compile && pnpm sync:abi",
+    "test": "pnpm test:contracts",
+    "test:contracts": "pnpm compile && node --test test/*.mjs",
     "sync:abi": "node scripts/sync-abis.mjs",
     "deploy:prod": "node scripts/deploy-prod.mjs",
     "time": "node scripts/time.mjs",

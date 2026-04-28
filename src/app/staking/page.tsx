@@ -74,7 +74,6 @@ function StakingPageInner() {
   const periodDays = Number(selectedPeriod) as StakingPeriod;
   const selectedPool = getPool(periodDays);
   const dailyRate = selectedPool?.dailyRate ?? 0;
-  const poolActive = !!selectedPool?.isActive;
   const numericAmount = parseFloat(amount) || 0;
 
   const estimatedGrossReward = useMemo(
@@ -93,10 +92,6 @@ function StakingPageInner() {
     if (!amount) return;
     if (!hasBoundReferrer) {
       setStakeMsg("请先在个人中心绑定上级");
-      return;
-    }
-    if (!poolActive) {
-      setStakeMsg("当前认购周期未开放");
       return;
     }
     if (!shdTokenAddress) {
@@ -121,10 +116,6 @@ function StakingPageInner() {
     setStakeMsg(null);
     if (!hasBoundReferrer) {
       setStakeMsg("请先在个人中心绑定上级");
-      return;
-    }
-    if (!poolActive) {
-      setStakeMsg("当前认购周期未开放");
       return;
     }
     if (!shdTokenAddress) {
@@ -165,7 +156,7 @@ function StakingPageInner() {
                   className="w-full"
                 />
                 <div className="mt-3 flex flex-wrap gap-2 sm:mt-4">
-                  <Badge variant={poolActive ? "blue" : "gray"} pulse={poolActive}>日补贴 {dailyRate}%</Badge>
+                  <Badge variant="blue" pulse>日补贴 {dailyRate}%</Badge>
                 </div>
               </Card>
             </div>
@@ -243,7 +234,7 @@ function StakingPageInner() {
                 <Button
                   onClick={handleApprove}
                   loading={isApproving || isApproveConfirming}
-                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer || !poolActive}
+                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer}
                   className="flex-1"
                 >
                   {isApproveConfirming ? "授权确认中..." : "授权并认购"}
@@ -252,7 +243,7 @@ function StakingPageInner() {
                 <Button
                   onClick={handleStake}
                   loading={isSending || isConfirming}
-                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer || !poolActive}
+                  disabled={numericAmount <= 0 || isReferrerLoading || !hasBoundReferrer}
                   className="flex-1"
                 >
                   {isConfirming

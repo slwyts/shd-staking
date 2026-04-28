@@ -41,7 +41,7 @@ export function useStakingPools() {
 
   const pools = useMemo<StakingPool[]>(() => {
     const rawPools = [pool90.data, pool180.data, pool360.data] as Array<
-      | { totalStaked: bigint; dailyRate: bigint; isActive: boolean }
+      | { totalStaked: bigint; dailyRate: bigint }
       | undefined
     >;
 
@@ -51,7 +51,6 @@ export function useStakingPools() {
         days,
         dailyRate: Number(pool?.dailyRate ?? BigInt(0)) / 100,
         totalStaked: pool?.totalStaked ?? BigInt(0),
-        isActive: pool?.isActive ?? false,
       };
     });
   }, [pool90.data, pool180.data, pool360.data]);

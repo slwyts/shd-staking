@@ -2,10 +2,9 @@
 pragma solidity ^0.8.34;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-contract SHDStaking is Ownable2Step {
+contract SHDStaking is Ownable {
     uint256 private constant BPS = 10_000;
     uint256 private constant DIRECT_REFERRAL_BPS = 500;
     uint256 private constant PROFIT_TAX_BPS = 5_000;
@@ -25,13 +24,13 @@ contract SHDStaking is Ownable2Step {
     struct PoolInfo {
         uint256 totalStaked;
         uint256 dailyRate;
-        bool isActive;
     }
 
     struct Position {
         uint256 id;
         uint256 amount;
         uint256 period;
+        uint256 dailyRate;
         uint256 startTime;
         uint256 endTime;
         uint256 claimedReward;
@@ -109,10 +108,9 @@ contract SHDStaking is Ownable2Step {
     mapping(uint256 => TeamRewardGrant) private teamRewardGrants;
     mapping(address => uint256[]) private _userTeamRewardGrantIds;
 
-    mapping(uint256 => bool) private packageActive;
     mapping(bytes32 => bool) private packageOrderUsed;
 
-    event PoolUpdated(uint256 indexed period, uint256 dailyRate, bool isActive);
+    event PoolUpdated(uint256 indexed period, uint256 dailyRate);
     event Staked(address indexed user, uint256 indexed positionId, uint256 amount, uint256 period, address indexed referrer);
     event Unstaked(address indexed user, uint256 indexed positionId, uint256 principal, uint256 reward, bool early);
     event ProfitTaxBurned(address indexed user, uint256 indexed positionId, uint256 amount);
@@ -124,7 +122,8 @@ contract SHDStaking is Ownable2Step {
     event TeamRewardGranted(address indexed recipient, address indexed source, uint256 indexed grantId, uint8 rewardType, uint256 amount, uint256 period);
     event TeamRewardClaimed(address indexed user, uint256 amount);
     event PackagePurchased(address indexed buyer, uint256 packageAmount, uint256 paidAmount, bytes32 indexed orderRef);
-    event PackageActiveUpdated(uint256 indexed packageAmount, bool isActive);
+    event AdminPositionCreated(address indexed user, uint256 indexed positionId, uint256 amount, uint256 period, uint256 dailyRate);
+    event PositionForceClosed(address indexed user, uint256 indexed positionId, uint256 amount, uint256 period);
     event RewardsFunded(address indexed from, uint256 amount);
     event ShdWithdrawn(address indexed to, uint256 amount);
 
@@ -134,25 +133,19 @@ contract SHDStaking is Ownable2Step {
         shd = IERC20(shdToken);
         _setReferrer(initialOwner, ROOT_REFERRER);
 
-        _setPool(90, 50, true);
-        _setPool(180, 100, true);
-        _setPool(360, 120, true);
-
-        _setPackageActive(5_000 ether, true);
-        _setPackageActive(10_000 ether, true);
-        _setPackageActive(30_000 ether, true);
-        _setPackageActive(50_000 ether, true);
-        _setPackageActive(100_000 ether, true);
+        _setPool(90, 50);
+        _setPool(180, 100);
+        _setPool(360, 120);
     }
 
-    function setPool(uint256 period, uint256 dailyRate, bool isActive) external onlyOwner {
-        require(period == 90 || period == 180 || period == 360, "SHDStaking: unsupported period");
-        _setPool(period, dailyRate, isActive);
+    function setPool(uint256 period, uint256 dailyRate) external onlyOwner {
+        require(_isSupportedPeriod(period), "SHDStaking: unsupported period");
+        _setPool(period, dailyRate);
     }
 
     function stake(uint256 amount, uint256 period) external {
+        require(_isSupportedPeriod(period), "SHDStaking: unsupported period");
         PoolInfo storage pool = pools[period];
-        require(pool.isActive, "SHDStaking: inactive pool");
         require(amount > 0, "SHDStaking: zero amount");
 
         address user = msg.sender;
@@ -161,28 +154,8 @@ contract SHDStaking is Ownable2Step {
 
         require(shd.transferFrom(user, address(this), amount), "SHDStaking: transfer failed");
 
-        uint256 positionId = nextPositionId++;
-        uint256 endTime = block.timestamp + period * 1 days;
         uint256 directReward = directReferrer == ROOT_REFERRER ? 0 : (amount * DIRECT_REFERRAL_BPS) / BPS;
-        positions[positionId] = Position({
-            id: positionId,
-            amount: amount,
-            period: period,
-            startTime: block.timestamp,
-            endTime: endTime,
-            claimedReward: 0,
-            isUnstaked: false,
-            referrer: directReferrer,
-            directReferralReward: directReward,
-            directReferralRecovered: 0,
-            profitTaxBurned: 0
-        });
-        positionOwner[positionId] = user;
-        _userPositionIds[user].push(positionId);
-
-        totalPrincipalLocked += amount;
-        totalActiveStaked[user] += amount;
-        pool.totalStaked += amount;
+        uint256 positionId = _createPosition(user, amount, period, pool.dailyRate, directReferrer, directReward);
 
         if (directReward > 0) {
             _payReward(directReferrer, directReward);
@@ -192,6 +165,42 @@ contract SHDStaking is Ownable2Step {
 
         _grantTeamRewards(user, positionId, amount, period);
         emit Staked(user, positionId, amount, period, directReferrer);
+    }
+
+    function adminCreatePosition(address user, uint256 amount, uint256 period) external onlyOwner returns (uint256 positionId) {
+        require(user != address(0), "SHDStaking: zero user");
+        require(amount > 0, "SHDStaking: zero amount");
+        require(_isSupportedPeriod(period), "SHDStaking: unsupported period");
+
+        address directReferrer = referrerOf[user];
+        require(directReferrer != address(0), "SHDStaking: referrer required");
+
+        PoolInfo storage pool = pools[period];
+        uint256 directReward = directReferrer == ROOT_REFERRER ? 0 : (amount * DIRECT_REFERRAL_BPS) / BPS;
+        positionId = _createPosition(user, amount, period, pool.dailyRate, directReferrer, directReward);
+
+        if (directReward > 0) {
+            _payReward(directReferrer, directReward);
+            referralRewardPaid[directReferrer] += directReward;
+            emit DirectReferralRewardPaid(user, directReferrer, positionId, directReward);
+        }
+
+        _grantTeamRewards(user, positionId, amount, period);
+        emit AdminPositionCreated(user, positionId, amount, period, pool.dailyRate);
+    }
+
+    function forceClosePosition(uint256 positionId) external onlyOwner {
+        Position storage position = positions[positionId];
+        require(position.id != 0, "SHDStaking: position not found");
+        require(!position.isUnstaked, "SHDStaking: already unstaked");
+
+        address user = positionOwner[positionId];
+        position.isUnstaked = true;
+        totalPrincipalLocked -= position.amount;
+        totalActiveStaked[user] -= position.amount;
+        pools[position.period].totalStaked -= position.amount;
+
+        emit PositionForceClosed(user, positionId, position.amount, position.period);
     }
 
     function bindReferrer(address referrer) external {
@@ -255,7 +264,7 @@ contract SHDStaking is Ownable2Step {
     }
 
     function purchasePackage(uint256 packageAmount, bytes32 orderRef) external {
-        require(packageActive[packageAmount], "SHDStaking: inactive package");
+        require(_isSupportedPackage(packageAmount), "SHDStaking: unsupported package");
         require(orderRef != bytes32(0), "SHDStaking: zero order ref");
         require(!packageOrderUsed[orderRef], "SHDStaking: order used");
 
@@ -277,13 +286,8 @@ contract SHDStaking is Ownable2Step {
         emit ShdWithdrawn(to, amount);
     }
 
-    function setPackageActive(uint256 packageAmount, bool isActive) external onlyOwner {
-        require(packageAmount > 0, "SHDStaking: zero package");
-        _setPackageActive(packageAmount, isActive);
-    }
-
-    function batchSetReferrers(address[] calldata users, address[] calldata referrers) external onlyOwner {
-        require(users.length == referrers.length, "SHDStaking: length mismatch");
+    function batchSetReferrers(address[] calldata referrers, address[] calldata users) external onlyOwner {
+        require(referrers.length == users.length, "SHDStaking: length mismatch");
         for (uint256 i; i < users.length; ++i) {
             _setReferrer(users[i], referrers[i]);
         }
@@ -372,15 +376,41 @@ contract SHDStaking is Ownable2Step {
         return balance > totalPrincipalLocked ? balance - totalPrincipalLocked : 0;
     }
 
-    function _setPool(uint256 period, uint256 dailyRate, bool isActive) private {
+    function _setPool(uint256 period, uint256 dailyRate) private {
         pools[period].dailyRate = dailyRate;
-        pools[period].isActive = isActive;
-        emit PoolUpdated(period, dailyRate, isActive);
+        emit PoolUpdated(period, dailyRate);
     }
 
-    function _setPackageActive(uint256 packageAmount, bool isActive) private {
-        packageActive[packageAmount] = isActive;
-        emit PackageActiveUpdated(packageAmount, isActive);
+    function _createPosition(
+        address user,
+        uint256 amount,
+        uint256 period,
+        uint256 dailyRate,
+        address directReferrer,
+        uint256 directReward
+    ) private returns (uint256 positionId) {
+        positionId = nextPositionId++;
+        uint256 endTime = block.timestamp + period * 1 days;
+        positions[positionId] = Position({
+            id: positionId,
+            amount: amount,
+            period: period,
+            dailyRate: dailyRate,
+            startTime: block.timestamp,
+            endTime: endTime,
+            claimedReward: 0,
+            isUnstaked: false,
+            referrer: directReferrer,
+            directReferralReward: directReward,
+            directReferralRecovered: 0,
+            profitTaxBurned: 0
+        });
+        positionOwner[positionId] = user;
+        _userPositionIds[user].push(positionId);
+
+        totalPrincipalLocked += amount;
+        totalActiveStaked[user] += amount;
+        pools[period].totalStaked += amount;
     }
 
     function _setReferrer(address user, address referrer) private {
@@ -545,7 +575,7 @@ contract SHDStaking is Ownable2Step {
 
     function _pendingStaticReward(Position storage position) private view returns (uint256) {
         if (position.id == 0 || position.isUnstaked || block.timestamp < position.endTime) return 0;
-        uint256 totalReward = (position.amount * pools[position.period].dailyRate * position.period) / BPS;
+        uint256 totalReward = (position.amount * position.dailyRate * position.period) / BPS;
         return totalReward > position.claimedReward ? totalReward - position.claimedReward : 0;
     }
 
@@ -575,6 +605,18 @@ contract SHDStaking is Ownable2Step {
         if (period == 180) return 500;
         if (period == 360) return 600;
         return 0;
+    }
+
+    function _isSupportedPeriod(uint256 period) private pure returns (bool) {
+        return period == 90 || period == 180 || period == 360;
+    }
+
+    function _isSupportedPackage(uint256 packageAmount) private pure returns (bool) {
+        return packageAmount == 5_000 ether
+            || packageAmount == 10_000 ether
+            || packageAmount == 30_000 ether
+            || packageAmount == 50_000 ether
+            || packageAmount == 100_000 ether;
     }
 
     function _createsCycle(address user, address referrer) private view returns (bool) {

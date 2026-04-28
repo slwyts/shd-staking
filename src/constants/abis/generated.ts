@@ -53,6 +53,43 @@ export const DAPP_ABI = [
       },
       {
         "indexed": true,
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "period",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "dailyRate",
+        "type": "uint256"
+      }
+    ],
+    "name": "AdminPositionCreated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
         "internalType": "address",
         "name": "referrer",
         "type": "address"
@@ -139,45 +176,7 @@ export const DAPP_ABI = [
         "type": "address"
       }
     ],
-    "name": "OwnershipTransferStarted",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "previousOwner",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "address",
-        "name": "newOwner",
-        "type": "address"
-      }
-    ],
     "name": "OwnershipTransferred",
-    "type": "event"
-  },
-  {
-    "anonymous": false,
-    "inputs": [
-      {
-        "indexed": true,
-        "internalType": "uint256",
-        "name": "packageAmount",
-        "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "isActive",
-        "type": "bool"
-      }
-    ],
-    "name": "PackageActiveUpdated",
     "type": "event"
   },
   {
@@ -225,15 +224,40 @@ export const DAPP_ABI = [
         "internalType": "uint256",
         "name": "dailyRate",
         "type": "uint256"
-      },
-      {
-        "indexed": false,
-        "internalType": "bool",
-        "name": "isActive",
-        "type": "bool"
       }
     ],
     "name": "PoolUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "period",
+        "type": "uint256"
+      }
+    ],
+    "name": "PositionForceClosed",
     "type": "event"
   },
   {
@@ -486,9 +510,31 @@ export const DAPP_ABI = [
     "type": "event"
   },
   {
-    "inputs": [],
-    "name": "acceptOwnership",
-    "outputs": [],
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "user",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "period",
+        "type": "uint256"
+      }
+    ],
+    "name": "adminCreatePosition",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      }
+    ],
     "stateMutability": "nonpayable",
     "type": "function"
   },
@@ -514,12 +560,12 @@ export const DAPP_ABI = [
     "inputs": [
       {
         "internalType": "address[]",
-        "name": "users",
+        "name": "referrers",
         "type": "address[]"
       },
       {
         "internalType": "address[]",
-        "name": "referrers",
+        "name": "users",
         "type": "address[]"
       }
     ],
@@ -568,6 +614,19 @@ export const DAPP_ABI = [
       }
     ],
     "name": "claimTeamRewards",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "positionId",
+        "type": "uint256"
+      }
+    ],
+    "name": "forceClosePosition",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -625,11 +684,6 @@ export const DAPP_ABI = [
             "internalType": "uint256",
             "name": "dailyRate",
             "type": "uint256"
-          },
-          {
-            "internalType": "bool",
-            "name": "isActive",
-            "type": "bool"
           }
         ],
         "internalType": "struct SHDStaking.PoolInfo",
@@ -913,6 +967,11 @@ export const DAPP_ABI = [
           },
           {
             "internalType": "uint256",
+            "name": "dailyRate",
+            "type": "uint256"
+          },
+          {
+            "internalType": "uint256",
             "name": "startTime",
             "type": "uint256"
           },
@@ -974,19 +1033,6 @@ export const DAPP_ABI = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "pendingOwner",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
     "inputs": [
       {
         "internalType": "uint256",
@@ -1034,24 +1080,6 @@ export const DAPP_ABI = [
     "inputs": [
       {
         "internalType": "uint256",
-        "name": "packageAmount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "isActive",
-        "type": "bool"
-      }
-    ],
-    "name": "setPackageActive",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint256",
         "name": "period",
         "type": "uint256"
       },
@@ -1059,11 +1087,6 @@ export const DAPP_ABI = [
         "internalType": "uint256",
         "name": "dailyRate",
         "type": "uint256"
-      },
-      {
-        "internalType": "bool",
-        "name": "isActive",
-        "type": "bool"
       }
     ],
     "name": "setPool",
