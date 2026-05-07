@@ -37,6 +37,18 @@ const PERIOD_TABS = [
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as `0x${string}`;
 
+type PendingStake = {
+  amount: bigint;
+  period: StakingPeriod;
+  account: `0x${string}`;
+  tokenAddress: `0x${string}`;
+  spender: `0x${string}`;
+};
+
+function isSameAddress(left: `0x${string}` | undefined, right: `0x${string}` | undefined) {
+  return !!left && !!right && left.toLowerCase() === right.toLowerCase();
+}
+
 function StakingPageInner() {
   const hydrated = useHydrated();
   const { address, isConnected, connectWallet } = useWallet();
@@ -65,8 +77,8 @@ function StakingPageInner() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>("90");
   const [amount, setAmount] = useState("");
   const [stakeMsg, setStakeMsg] = useState<string | null>(null);
-  const [pendingStake, setPendingStake] = useState<{ amount: bigint; period: StakingPeriod } | null>(null);
-  const [approvedStakeAmount, setApprovedStakeAmount] = useState(BigInt(0));
+  const [pendingStake, setPendingStake] = useState<PendingStake | null>(null);
+  const [approvedStake, setApprovedStake] = useState<PendingStake | null>(null);
 
   const boundReferrerAddress = boundReferrer as `0x${string}` | undefined;
   const hasBoundReferrer = !!boundReferrerAddress && boundReferrerAddress !== ZERO_ADDRESS;
@@ -90,6 +102,10 @@ function StakingPageInner() {
 
   const handleApprove = () => {
     if (!amount) return;
+    if (!walletAddress) {
+      setStakeMsg("请先连接钱包");
+      return;
+    }
     if (!hasBoundReferrer) {
       setStakeMsg("请先在个人中心绑定上级");
       return;
@@ -98,18 +114,39 @@ function StakingPageInner() {
       setStakeMsg("正在读取 SHD 合约地址，请稍后再试");
       return;
     }
-    setPendingStake({ amount: parseUnits(amount, 18), period: periodDays });
+    setPendingStake({
+      amount: parseUnits(amount, 18),
+      period: periodDays,
+      account: walletAddress,
+      tokenAddress: shdTokenAddress,
+      spender: DAPP_CONTRACT_ADDRESS,
+    });
     approve(amount, 18);
   };
 
   useEffect(() => {
     if (!isApproveConfirmed || !pendingStake) return;
+    if (
+      !isSameAddress(pendingStake.account, walletAddress) ||
+      !isSameAddress(pendingStake.tokenAddress, shdTokenAddress) ||
+      !isSameAddress(pendingStake.spender, DAPP_CONTRACT_ADDRESS)
+    ) {
+      setStakeMsg("授权账号已切换，请重新授权");
+      setPendingStake(null);
+      return;
+    }
+
     void refetchAllowance();
-    setApprovedStakeAmount(pendingStake.amount);
+    setApprovedStake(pendingStake);
     setStakeMsg("授权成功，正在发起认购…");
-    stake(pendingStake);
+    stake({ amount: pendingStake.amount, period: pendingStake.period });
     setPendingStake(null);
-  }, [isApproveConfirmed, pendingStake, refetchAllowance, stake]);
+  }, [isApproveConfirmed, pendingStake, refetchAllowance, shdTokenAddress, stake, walletAddress]);
+
+  useEffect(() => {
+    setPendingStake(null);
+    setApprovedStake(null);
+  }, [walletAddress, shdTokenAddress]);
 
   const handleStake = () => {
     if (!amount || numericAmount <= 0) return;
@@ -130,6 +167,13 @@ function StakingPageInner() {
   };
 
   const parsedAmount = numericAmount > 0 ? parseUnits(amount, 18) : BigInt(0);
+  const approvedStakeAmount =
+    approvedStake &&
+    isSameAddress(approvedStake.account, walletAddress) &&
+    isSameAddress(approvedStake.tokenAddress, shdTokenAddress) &&
+    isSameAddress(approvedStake.spender, DAPP_CONTRACT_ADDRESS)
+      ? approvedStake.amount
+      : BigInt(0);
   const showApproveStep = numericAmount > 0 && needsApproval(parsedAmount) && approvedStakeAmount < parsedAmount;
 
   return (
