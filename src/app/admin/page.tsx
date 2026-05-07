@@ -360,7 +360,7 @@ export default function AdminPage() {
     if (isFundApprovalConfirmed) void refetchFundAllowance();
     if (!isFundApprovalConfirmed || pendingFundAmount === null) return;
     if (!onChain || !isAdmin) return;
-    setPoolMsg("授权成功，正在充入资金池…");
+    setPoolMsg("授权成功，正在充入合约余额…");
     resetPoolWrite();
     writePoolContract({
       address: DAPP_CONTRACT_ADDRESS,
@@ -458,7 +458,7 @@ export default function AdminPage() {
     if (fundNeedsApproval(amount)) {
       setPendingFundAmount(amount);
       approveFund(fundAmount, 18);
-      setPoolMsg("授权确认后将自动充入资金池");
+      setPoolMsg("授权确认后将自动充入合约余额");
       return;
     }
 
@@ -673,7 +673,7 @@ export default function AdminPage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold text-cyber-blue sm:text-xl">管理控制台</h1>
-            <p className="text-[10px] text-text-muted sm:text-xs">资金池 &amp; 用户关系管理</p>
+            <p className="text-[10px] text-text-muted sm:text-xs">合约余额 &amp; 用户关系管理</p>
           </div>
         </div>
         <Link href="/dashboard">
@@ -725,13 +725,13 @@ export default function AdminPage() {
         <Card className="border-accent-green/25 shadow-[0_0_28px_rgba(16,185,129,0.08)]">
           <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-text-primary sm:text-base">
             <ArrowDownToLine className="h-4 w-4 text-accent-green sm:h-5 sm:w-5" />
-            资金池管理
+            合约余额管理
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="space-y-3 rounded-lg bg-white/[0.04] p-3 sm:p-4">
               <div className="flex items-center gap-2 text-xs font-medium text-accent-green sm:text-sm">
                 <ArrowDownToLine className="h-4 w-4" />
-                充入收益资金
+                充入合约余额
               </div>
               <input
                 type="text"
@@ -748,7 +748,7 @@ export default function AdminPage() {
                 loading={isFundApproving || isFundApprovalConfirming || isPoolPending || isPoolConfirming}
                 onClick={handleFundPool}
               >
-                {isFundApproving ? "等待授权签名..." : isFundApprovalConfirming ? "授权确认中..." : "充入资金池"}
+                {isFundApproving ? "等待授权签名..." : isFundApprovalConfirming ? "授权确认中..." : "充入合约余额"}
               </Button>
             </div>
             <div className="space-y-3 rounded-lg bg-white/[0.04] p-3 sm:p-4">
@@ -787,7 +787,7 @@ export default function AdminPage() {
             </div>
           </div>
           {poolMsg && <p className="mt-3 text-xs text-amber-orange">{poolMsg}</p>}
-          {isPoolSuccess && <p className="mt-3 text-xs text-accent-green">资金池交易已确认</p>}
+          {isPoolSuccess && <p className="mt-3 text-xs text-accent-green">合约余额交易已确认</p>}
         </Card>
       </section>
 

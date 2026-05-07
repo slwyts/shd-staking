@@ -173,6 +173,7 @@ describe("SHDStaking", () => {
     await send(context, staking, "batchSetReferrers", [[owner, county], [county, alice]]);
     await send(context, staking, "batchSetUserLevels", [[county], [LEVEL_COUNTY]]);
     await send(context, staking, "batchSetOperationCenters", [[county], [true]]);
+    await fundContract(context, amount * 2n);
 
     const aliceBalanceBefore = await token.read.balanceOf([alice]);
     const countyBalanceBefore = await token.read.balanceOf([county]);
@@ -249,6 +250,32 @@ describe("SHDStaking", () => {
     assert.equal(settledEarlyPosition.directReferralRecovered, directReward);
   });
 
+  it("lets admin-created positions skip direct rewards when contract balance is insufficient", async () => {
+    const { accounts, staking, token } = context;
+    const { owner, alice } = accounts;
+    const amount = toToken("1000");
+
+    await send(context, staking, "batchSetReferrers", [[owner], [alice]]);
+
+    const ownerBalanceBefore = await token.read.balanceOf([owner]);
+    await send(context, staking, "adminCreatePosition", [alice, amount, 90n]);
+
+    const [position] = await staking.read.getUserPositions([alice]);
+    assert.equal(position.amount, amount);
+    assert.equal(position.directReferralReward, 0n);
+    assert.equal((await staking.read.getTeamInfo([owner])).referralReward, 0n);
+    assert.equal(await token.read.balanceOf([owner]), ownerBalanceBefore);
+
+    await fundContract(context, amount);
+    const aliceBalanceBeforeUnstake = await token.read.balanceOf([alice]);
+    const quote = await staking.read.getSettlementQuote([position.id]);
+    assert.equal(quote.directReferralRecovery, 0n);
+    assert.equal(quote.payout, amount);
+
+    await send(context, staking, "unstake", [position.id], alice);
+    assert.equal(await token.read.balanceOf([alice]), aliceBalanceBeforeUnstake + amount);
+  });
+
   it("settles mature static rewards with profit tax burn and direct referral reward", async () => {
     const { accounts, staking, token } = context;
     const { owner, alice } = accounts;
@@ -268,6 +295,7 @@ describe("SHDStaking", () => {
     await approveAndStake(context, alice, stakeAmount, 90n);
 
     assert.equal((await token.read.balanceOf([owner])) - ownerBalanceBefore, directReward);
+    assert.equal(await token.read.balanceOf([staking.address]), stakeAmount - directReward);
 
     const [position] = await staking.read.getUserPositions([alice]);
     assert.equal(position.amount, stakeAmount);
@@ -288,6 +316,8 @@ describe("SHDStaking", () => {
     assert.equal(quote.userReward, userReward);
     assert.equal(quote.burnAmount, burnAmount);
     assert.equal(quote.payout, stakeAmount + userReward);
+
+    await fundContract(context, grossReward + directReward);
 
     await send(context, staking, "unstake", [position.id], alice);
 
@@ -313,6 +343,7 @@ describe("SHDStaking", () => {
     const userBalanceBefore = await token.read.balanceOf([bob]);
 
     await approveAndStake(context, bob, stakeAmount, 180n);
+    assert.equal(await token.read.balanceOf([staking.address]), stakeAmount - directReward);
 
     const [position] = await staking.read.getUserPositions([bob]);
     const quote = await staking.read.getSettlementQuote([position.id]);
@@ -463,9 +494,6 @@ async function deployFixture() {
     account: accounts.owner,
   });
 
-  await send(baseContext, token, "approve", [staking.address, toToken("500000")], accounts.owner);
-  await send(baseContext, staking, "fundRewards", [toToken("500000")], accounts.owner);
-
   return {
     connection,
     provider,
@@ -521,6 +549,11 @@ async function send(context, contract, functionName, args = [], account) {
 
 async function fundUser(context, user, amount) {
   await send(context, context.token, "transfer", [user, amount], context.accounts.owner);
+}
+
+async function fundContract(context, amount) {
+  await send(context, context.token, "approve", [context.staking.address, amount], context.accounts.owner);
+  await send(context, context.staking, "fundRewards", [amount], context.accounts.owner);
 }
 
 async function approveAndStake(context, user, amount, period) {

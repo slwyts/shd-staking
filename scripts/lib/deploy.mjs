@@ -65,15 +65,7 @@ export async function deployLocalDapp({ rootDir, rpcUrl, chainId, initialOwner }
     args: [mock.address, owner],
   });
   console.log(`SHDStaking deployed: ${dapp.address}`);
-
-  const fundHash = await walletClient.writeContract({
-    address: mock.address,
-    abi: mockArtifact.abi,
-    functionName: "transfer",
-    args: [dapp.address, localShare],
-  });
-  await publicClient.waitForTransactionReceipt({ hash: fundHash });
-  console.log("Funded local DApp contract with 100,000,000 SHD");
+  console.log("Local DApp starts with 0 SHD; user payments fund the contract balance.");
 
   if (owner !== account.address) {
     const ownerGasHash = await walletClient.sendTransaction({
@@ -92,7 +84,7 @@ export async function deployLocalDapp({ rootDir, rpcUrl, chainId, initialOwner }
     await publicClient.waitForTransactionReceipt({ hash: ownerFundHash });
     console.log("Funded local owner with 100,000,000 SHD");
   } else {
-    console.log("Local owner keeps 100,000,000 SHD");
+    console.log("Local owner keeps 200,000,000 SHD");
   }
 
   return { dappAddress: dapp.address, shdTokenAddress: mock.address, deployer: account.address, owner };

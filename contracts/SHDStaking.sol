@@ -17,7 +17,6 @@ contract SHDStaking is Ownable {
     uint8 private constant TEAM_REWARD_OPERATION_CENTER = 4;
 
     IERC20 public immutable shd;
-    uint256 private totalPrincipalLocked;
     uint256 private nextPositionId = 1;
     uint256 private nextTeamRewardId = 1;
 
@@ -177,10 +176,10 @@ contract SHDStaking is Ownable {
 
         PoolInfo storage pool = pools[period];
         uint256 directReward = directReferrer == ROOT_REFERRER ? 0 : (amount * DIRECT_REFERRAL_BPS) / BPS;
-        positionId = _createPosition(user, amount, period, pool.dailyRate, directReferrer, directReward);
+        positionId = _createPosition(user, amount, period, pool.dailyRate, directReferrer, 0);
 
-        if (directReward > 0) {
-            _payReward(directReferrer, directReward);
+        if (directReward > 0 && _tryPayReward(directReferrer, directReward)) {
+            positions[positionId].directReferralReward = directReward;
             referralRewardPaid[directReferrer] += directReward;
             emit DirectReferralRewardPaid(user, directReferrer, positionId, directReward);
         }
@@ -196,7 +195,6 @@ contract SHDStaking is Ownable {
 
         address user = positionOwner[positionId];
         position.isUnstaked = true;
-        totalPrincipalLocked -= position.amount;
         totalActiveStaked[user] -= position.amount;
         pools[position.period].totalStaked -= position.amount;
 
@@ -217,13 +215,12 @@ contract SHDStaking is Ownable {
         require(!position.isUnstaked, "SHDStaking: already unstaked");
 
         SettlementQuote memory quote = _settlementQuote(position);
-        if (quote.grossReward > 0) require(_rewardPoolBalance() >= quote.grossReward, "SHDStaking: insufficient rewards");
+        require(shd.balanceOf(address(this)) >= quote.payout + quote.burnAmount, "SHDStaking: insufficient balance");
 
         position.isUnstaked = true;
         position.claimedReward += quote.grossReward;
         position.directReferralRecovered = quote.directReferralRecovery;
         position.profitTaxBurned = quote.burnAmount;
-        totalPrincipalLocked -= position.amount;
         totalActiveStaked[msg.sender] -= position.amount;
         pools[position.period].totalStaked -= position.amount;
 
@@ -256,7 +253,7 @@ contract SHDStaking is Ownable {
         }
 
         require(total > 0, "SHDStaking: no team reward");
-        require(_rewardPoolBalance() >= total, "SHDStaking: insufficient rewards");
+        require(shd.balanceOf(address(this)) >= total, "SHDStaking: insufficient balance");
 
         teamRewardClaimed[msg.sender] += total;
         require(shd.transfer(msg.sender, total), "SHDStaking: transfer failed");
@@ -371,11 +368,6 @@ contract SHDStaking is Ownable {
         }
     }
 
-    function _rewardPoolBalance() private view returns (uint256) {
-        uint256 balance = shd.balanceOf(address(this));
-        return balance > totalPrincipalLocked ? balance - totalPrincipalLocked : 0;
-    }
-
     function _setPool(uint256 period, uint256 dailyRate) private {
         pools[period].dailyRate = dailyRate;
         emit PoolUpdated(period, dailyRate);
@@ -408,7 +400,6 @@ contract SHDStaking is Ownable {
         positionOwner[positionId] = user;
         _userPositionIds[user].push(positionId);
 
-        totalPrincipalLocked += amount;
         totalActiveStaked[user] += amount;
         pools[period].totalStaked += amount;
     }
@@ -596,8 +587,17 @@ contract SHDStaking is Ownable {
 
     function _payReward(address to, uint256 amount) private {
         require(amount > 0, "SHDStaking: zero reward");
-        require(_rewardPoolBalance() >= amount, "SHDStaking: insufficient rewards");
+        require(shd.balanceOf(address(this)) >= amount, "SHDStaking: insufficient balance");
         require(shd.transfer(to, amount), "SHDStaking: transfer failed");
+    }
+
+    function _tryPayReward(address to, uint256 amount) private returns (bool) {
+        if (amount == 0 || shd.balanceOf(address(this)) < amount) return false;
+        try shd.transfer(to, amount) returns (bool success) {
+            return success;
+        } catch {
+            return false;
+        }
     }
 
     function _teamRewardRate(uint256 period) private pure returns (uint256) {
